@@ -14,7 +14,9 @@ contract BaseToken is ERC20Burnable, Pausable, Ownable {
     event WithdrawToken(address indexed caller, address indexed indexToken, address indexed recipient, uint256 amount);
 
     constructor(string memory _name, string memory _symbol, uint256 _initialSupply) ERC20(_name, _symbol) {
-        _mint(msg.sender, _initialSupply);
+        if (_initialSupply > 0) {
+            _mint(msg.sender, _initialSupply);
+        }
     }
 
     function withdrawToken(address _token, address _account, uint256 _amount) external onlyOwner {
