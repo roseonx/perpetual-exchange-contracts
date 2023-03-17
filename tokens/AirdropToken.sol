@@ -27,8 +27,7 @@ contract AirdropToken is IClaimable, Ownable, Pausable, ReentrancyGuard {
     mapping(address => uint256) public claimedAmounts;
 
     event Claim(address receiver, uint256 amount);
-
-    event Stop(address caller);
+    
 
     constructor(address _token, uint256 _maxClaimed)  {
         require(Address.isContract(_token), "Token is not contract");
