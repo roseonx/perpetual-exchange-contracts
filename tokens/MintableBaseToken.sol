@@ -24,25 +24,24 @@ contract MintableBaseToken is BaseToken, IMintable {
         uint256 _initialSupply
     ) BaseToken(_name, _symbol, _initialSupply) {}
 
-    function burn(address _account, uint256 _amount) external virtual onlyMinter override {
+    function burn(address _account, uint256 _amount) external onlyMinter override {
         _burn(_account, _amount);
     }
 
-    function mint(address _account, uint256 _amount) external virtual onlyMinter override {
+    function mint(address _account, uint256 _amount) external onlyMinter override {
         _mint(_account, _amount);
     }
 
     function setMinter(address _minter) external override onlyOwner {
-        require(!isMinter[_minter], "MintableBaseToken: Already minter");
         isMinter[_minter] = true;
         mintersCount += 1;
         emit SetMinterRole(msg.sender, _minter);
     }
 
     function revokeMinter(address _minter) external override onlyOwner {
-        require(isMinter[_minter], "MintableBaseToken: Not minter");
         isMinter[_minter] = false;
         mintersCount -= 1;
         emit RevokeMinterRole(msg.sender, _minter);
     }
 }
+
