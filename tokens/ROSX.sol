@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 import "./MintableBaseToken.sol";
 
 contract ROSX is ERC20Capped, MintableBaseToken {
-    uint256 public immutable MAX_SUPPLY = 200_000_000 * 10**18;
+    uint256 public constant MAX_SUPPLY = 200_000_000 * 10**18;
 
     constructor() ERC20Capped(MAX_SUPPLY) MintableBaseToken("Roseon", "ROSX", 0) {
         
