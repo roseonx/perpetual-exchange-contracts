@@ -33,12 +33,14 @@ contract MintableBaseToken is BaseToken, IMintable {
     }
 
     function setMinter(address _minter) external override onlyOwner {
+        require(!isMinter[_minter], "MintableBaseToken: Already minter");
         isMinter[_minter] = true;
         mintersCount += 1;
         emit SetMinterRole(msg.sender, _minter);
     }
 
     function revokeMinter(address _minter) external override onlyOwner {
+        require(isMinter[_minter], "MintableBaseToken: Not minter");
         isMinter[_minter] = false;
         mintersCount -= 1;
         emit RevokeMinterRole(msg.sender, _minter);
