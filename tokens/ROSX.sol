@@ -13,12 +13,12 @@ contract ROSX is MintableBaseToken {
         
     }
 
-    function burn(address _account, uint256 _amount) external onlyOwner override {
+    function burn(address _account, uint256 _amount) external onlyMinter override {
         currentSupply -= _amount;
         _burn(_account, _amount);
     }
 
-    function mint(address _account, uint256 _amount) external onlyOwner override {
+    function mint(address _account, uint256 _amount) external onlyMinter override {
         if (currentSupply + _amount > maxSupply) {
             revert("Max supply exceeded");
         } else {
