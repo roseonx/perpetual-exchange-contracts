@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.9;
+pragma solidity 0.8.12;
 
 import "./BaseToken.sol";
 import "./interfaces/IMintable.sol";
@@ -24,23 +24,21 @@ contract MintableBaseToken is BaseToken, IMintable {
         uint256 _initialSupply
     ) BaseToken(_name, _symbol, _initialSupply) {}
 
-    function burn(address _account, uint256 _amount) external override onlyMinter {
+    function burn(address _account, uint256 _amount) external virtual onlyOwner override {
         _burn(_account, _amount);
     }
 
-    function mint(address _account, uint256 _amount) external override onlyMinter {
+    function mint(address _account, uint256 _amount) external virtual onlyOwner override {
         _mint(_account, _amount);
     }
 
     function setMinter(address _minter) external override onlyOwner {
-        require(!isMinter[_minter], "MintableBaseToken: Already minter");
         isMinter[_minter] = true;
         mintersCount += 1;
         emit SetMinterRole(msg.sender, _minter);
     }
 
     function revokeMinter(address _minter) external override onlyOwner {
-        require(isMinter[_minter], "MintableBaseToken: Not minter");
         isMinter[_minter] = false;
         mintersCount -= 1;
         emit RevokeMinterRole(msg.sender, _minter);
