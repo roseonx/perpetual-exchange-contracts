@@ -8,7 +8,7 @@ import "./MintableBaseToken.sol";
 contract ROSX is ERC20Capped, MintableBaseToken {
     uint256 public immutable MAX_SUPPLY = 200_000_000 * 10**18;
 
-    constructor() ERC20Capped(200_000_000 * 10**18) MintableBaseToken("Roseon", "ROSX", 0) {
+    constructor() ERC20Capped(MAX_SUPPLY) MintableBaseToken("Roseon", "ROSX", 0) {
         
     }
 
