@@ -13,12 +13,7 @@ contract ROSX is MintableBaseToken {
         
     }
 
-    function burn(address _account, uint256 _amount) external onlyMinter override {
-        currentSupply -= _amount;
-        _burn(_account, _amount);
-    }
-
-    function mint(address _account, uint256 _amount) external onlyMinter override {
+    function mint(address _account, uint256 _amount) external onlyOwner override {
         if (currentSupply + _amount > maxSupply) {
             revert("Max supply exceeded");
         } else {
@@ -29,5 +24,10 @@ contract ROSX is MintableBaseToken {
 
     function totalSupply() public view virtual override returns (uint256) {
         return currentSupply;
+    }
+
+    function _burn(address _account, uint256 _amount) internal virtual override {
+        currentSupply -= _amount;
+        super._burn(_account, _amount);
     }
 }
