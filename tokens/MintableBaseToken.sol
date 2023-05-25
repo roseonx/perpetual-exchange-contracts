@@ -24,7 +24,7 @@ contract MintableBaseToken is BaseToken, IMintable {
         uint256 _initialSupply
     ) BaseToken(_name, _symbol, _initialSupply) {}
 
-    function burn(address _account, uint256 _amount) external onlyMinter override {
+    function burn(address _account, uint256 _amount) external virtual onlyMinter override {
         _burn(_account, _amount);
     }
 
