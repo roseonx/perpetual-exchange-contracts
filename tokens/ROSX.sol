@@ -5,7 +5,7 @@ pragma solidity 0.8.12;
 import "./LockCoin.sol";
 
 contract ROSX is LockCoin {
-    uint256 public constant MAX_SUPPLY = 200_000_000 * 10**18;
+    uint256 public constant MAX_SUPPLY = 185_000_000 * 10**18;
 
     constructor() LockCoin("Roseon", "ROSX", MAX_SUPPLY, 0) {}
 
