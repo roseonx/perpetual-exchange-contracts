@@ -108,6 +108,22 @@ contract PriceManager is IPriceManager, BaseAccess, Constants {
         return (_usdAmount * (10 ** decimals)) / _tokenPrice;
     }
 
+    function floorTokenAmount(uint256 _amount, address _token) external view returns(uint256) {
+        return _floorTokenAmount(_amount, _token);
+    }
+
+    function _floorTokenAmount(uint256 _amount, address _token) internal view returns(uint256) {
+        require(tokenDecimals[_token] > 0, "Not initialized this token");
+        uint256 decimalsDiff = PRICE_PRECISION / 10**(tokenDecimals[_token]);
+
+        if (decimalsDiff == 1) {
+            return _amount;
+        }
+
+        require(_amount >= 10**decimalsDiff, "Invalid amount");
+        return _amount - (_amount % (10**decimalsDiff));
+    }
+
     function getDelta(
         address _indexToken,
         uint256 _size,

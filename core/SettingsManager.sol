@@ -8,7 +8,9 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./interfaces/ISettingsManager.sol";
 import "./interfaces/IPositionKeeper.sol";
 import "./interfaces/IPositionHandler.sol";
-import "./interfaces/IVipProgram.sol";
+import "./interfaces/IVault.sol";
+import "./interfaces/IReferralSystem.sol";
+
 import {Constants} from "../constants/Constants.sol";
 
 contract SettingsManager is ISettingsManager, Ownable, Constants {
@@ -16,8 +18,9 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     address public immutable RUSD;
     IPositionKeeper public positionKeeper;
     IPositionHandler public positionHandler;
-    IVipProgram public vipProgram;
+    IVault public vault;
 
+    address public referralSystem;
     address public override feeManager;
 
     bool public override isActive = true;
@@ -42,20 +45,27 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     uint256 public override liquidationFeeUsd; // 0 usd
     uint256 public override stakingFee = 300; // 0.3%
     uint256 public override unstakingFee;
-    uint256 public override referFee = 5000; // 5%
     uint256 public override triggerGasFee = 0; //100 gwei;
     uint256 public override positionDefaultSlippage = BASIS_POINTS_DIVISOR / 200; // 0.5%
+    uint256 public override maxProfitPercent = 10000; // 10%
+    uint256 public override basisFundingRateFactor = 10000;
+    uint256 public override maxFundingRate;
+    uint256 public override defaultBorrowFeeFactor = 10; // 0.01% per hour
 
-    mapping(address => bool) public override isManager;
     mapping(address => bool) public override isCollateral;
     mapping(address => bool) public override isTradable;
     mapping(address => bool) public override isStable;
     mapping(address => bool) public override isStaking;
 
+    mapping(address => mapping(bool => uint256)) public maxOpenInterestPerAssetPerSide;
+    mapping(address => mapping(bool => uint256)) public openInterestPerAssetPerSide;
+
     mapping(address => mapping(bool => uint256)) public override cumulativeFundingRates;
-    mapping(address => mapping(bool => uint256)) public override fundingRateFactor;
     mapping(address => mapping(bool => uint256)) public override marginFeeBasisPoints; // = 100; // 0.1%
-    mapping(address => mapping(bool => uint256)) public override lastFundingTimes;
+    mapping(address => uint256) public override lastFundingTimes;
+    mapping(address => uint256) public override fundingRateFactor;
+    mapping(address => uint256) public override borrowFeeFactor;
+    mapping(address => int256) public override fundingIndex;
 
     mapping(bool => uint256) public maxOpenInterestPerSide;
     mapping(bool => uint256) public override openInterestPerSide;
@@ -71,11 +81,12 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
 
     event SetPositionKeeper(address indexed positionKeeper);
     event SetPositionHandler(address indexed positionHandler);
-    event SetVipPrgoram(address indexed vipProgram);
+    event SetVault(address vault);
+    event SetReferralSystem(address indexed referralSystem);
+
     event SetActive(bool isActive);
     event SetEnableNonStableCollateral(bool isEnabled);
     event SetReferEnabled(bool referEnabled);
-    event ChangedReferFee(uint256 referFee);
     event EnableForexMarket(bool _enabled);
     event EnableMarketOrder(bool _enabled);
     event SetBountyPercent(uint256 indexed bountyPercent);
@@ -86,13 +97,12 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     event SetEnableStaking(address indexed token, bool isEnabled);
     event SetEnableUnstaking(bool isEnabled);
     event SetFundingInterval(uint256 indexed fundingInterval);
-    event SetFundingRateFactor(address indexed token, bool isLong, uint256 fundingRateFactor);
+    event SetFundingRateFactor(address indexed token, uint256 fundingRateFactor);
     event SetLiquidationFeeUsd(uint256 indexed _liquidationFeeUsd);
     event SetMarginFeeBasisPoints(address indexed token, bool isLong, uint256 marginFeeBasisPoints);
     event SetMaxOpenInterestPerAsset(address indexed token, uint256 maxOIAmount);
     event SetMaxOpenInterestPerSide(bool isLong, uint256 maxOIAmount);
     event SetMaxOpenInterestPerUser(uint256 maxOIAmount);
-    event SetManager(address manager, bool isManager);
     event SetStakingFee(uint256 indexed fee);
     event SetUnstakingFee(uint256 indexed fee);
     event SetTriggerGasFee(uint256 indexed fee);
@@ -108,6 +118,10 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     event SetEnableConvertRUSD(bool enableConvertRUSD);
     event SetEmergencyStop(bool isEmergencyStop);
     event SetPriceMovementPercent(uint256 priceMovementPercent);
+    event UpdateMaxProfitPercent(uint256 maxProfitPercent);
+    event UpdateFunding(address indexed token, int256 fundingIndex);
+    event SetMaxFundingRate(uint256 maxFundingRate);
+    event SetMaxOpenInterestPerAssetPerSide(address indexed token, bool isLong, uint256 maxOIAmount);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
@@ -117,6 +131,7 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     constructor(address _RUSD) {
         require(Address.isContract(_RUSD), "RUSD address invalid");
         RUSD = _RUSD;
+        _setMaxFundingRate(MAX_FUNDING_RATE);
     }
 
     //Config functions
@@ -132,10 +147,18 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         emit SetPositionHandler(_positionHandler);
     }
 
-    function setVipProgram(address _vipProgram) external onlyOwner {
-        vipProgram = IVipProgram(_vipProgram);
-        emit SetVipPrgoram(_vipProgram);
+    function setVault(address _vault) external onlyOwner {
+        require(Address.isContract(_vault), "Vault invalid");
+        vault = IVault(_vault);
+        emit SetVault(_vault);
     }
+
+    function setReferralSystem(address _referralSystem) external onlyOwner {
+        require(Address.isContract(_referralSystem), "ReferralSystem invalid");
+        referralSystem = _referralSystem;
+        emit SetReferralSystem(_referralSystem);
+    }
+
 
     function setOnBeta(bool _isOnBeta) external onlyOwner {
         isActive = _isOnBeta;
@@ -177,6 +200,24 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
 
     function setEmergencyStop(bool _isEmergencyStop) external onlyOwner {
         isEmergencyStop = _isEmergencyStop;
+    }
+
+    function setMaxProfitPercent(uint256 _maxProfitPercent) external onlyOwner {
+        maxProfitPercent = _maxProfitPercent;
+        emit UpdateMaxProfitPercent(_maxProfitPercent);
+    }
+
+    function setMaxFundingRate(uint256 _maxFundingRate) external onlyOwner {
+        _setMaxFundingRate(_maxFundingRate);
+    }
+
+    function setMaxOpenInterestPerAssetPerSide(
+        address _token,
+        bool _isLong,
+        uint256 _maxAmount
+    ) external onlyOwner {
+        maxOpenInterestPerAssetPerSide[_token][_isLong] = _maxAmount;
+        emit SetMaxOpenInterestPerAssetPerSide(_token, _isLong, _maxAmount);
     }
     //End config functions
 
@@ -232,6 +273,7 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         openInterestPerUser[_sender] += _amount;
         openInterestPerAsset[_token] += _amount;
         openInterestPerSide[_isLong] += _amount;
+        openInterestPerAssetPerSide[_token][_isLong] += _amount;
         emit UpdateTotalOpenInterest(_token, _isLong, _amount);
     }
 
@@ -298,10 +340,10 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         emit SetFundingInterval(fundingInterval);
     }
 
-    function setFundingRateFactor(address _token, bool _isLong, uint256 _fundingRateFactor) external onlyOwner {
+    function setFundingRateFactor(address _token, uint256 _fundingRateFactor) external onlyOwner {
         require(_fundingRateFactor <= MAX_FUNDING_RATE_FACTOR, "FundingRateFactor should be smaller than MAX");
-        fundingRateFactor[_token][_isLong] = _fundingRateFactor;
-        emit SetFundingRateFactor(_token, _isLong, _fundingRateFactor);
+        fundingRateFactor[_token] = _fundingRateFactor;
+        emit SetFundingRateFactor(_token, _fundingRateFactor);
     }
 
     function setLiquidateThreshold(uint256 _newThreshold, address _token) external onlyOwner {
@@ -337,20 +379,9 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         emit SetMaxOpenInterestPerUser(_maxAmount);
     }
 
-    function setManager(address _manager, bool _isManager) external onlyOwner {
-        isManager[_manager] = _isManager;
-        emit SetManager(_manager, _isManager);
-    }
-
     function setReferEnabled(bool _referEnabled) external onlyOwner {
         referEnabled = _referEnabled;
         emit SetReferEnabled(referEnabled);
-    }
-
-    function setReferFee(uint256 _fee) external onlyOwner {
-        require(_fee <= BASIS_POINTS_DIVISOR, "Fee should be smaller than feeDivider");
-        referFee = _fee;
-        emit ChangedReferFee(_fee);
     }
 
     function setTriggerGasFee(uint256 _fee) external onlyOwner {
@@ -364,44 +395,88 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         emit SetEnableConvertRUSD(_isEnableConvertRUSD);
     }
 
-    function updateCumulativeFundingRate(address _token, bool _isLong) external override hasPermission {
-        if (lastFundingTimes[_token][_isLong] == 0) {
-            lastFundingTimes[_token][_isLong] = uint256(block.timestamp / fundingInterval) * fundingInterval;
-            return;
-        }
-
-        if (lastFundingTimes[_token][_isLong] + fundingInterval > block.timestamp) {
-            return;
-        }
-
-        cumulativeFundingRates[_token][_isLong] += getNextFundingRate(_token, _isLong);
-        lastFundingTimes[_token][_isLong] = uint256(block.timestamp / fundingInterval) * fundingInterval;
-        emit UpdateFundingRate(
-            _token,
-            _isLong,
-            cumulativeFundingRates[_token][_isLong],
-            lastFundingTimes[_token][_isLong]
-        );
-    }
-
     function undelegate(address[] memory _delegates) external {
         for (uint256 i = 0; i < _delegates.length; ++i) {
             EnumerableSet.remove(_delegatesByMaster[msg.sender], _delegates[i]);
         }
     }
 
-    function collectMarginFees(
-        address _account,
-        address _indexToken,
-        bool _isLong,
+    function getFees(
+        bytes32 _key,
         uint256 _sizeDelta,
-        uint256 _size,
-        uint256 _entryFundingRate
-    ) external view override returns (uint256) {
-        uint256 feeUsd = getPositionFee(_indexToken, _isLong, _sizeDelta);
-        uint256 discountable = address(vipProgram) != address(0) ? vipProgram.getDiscountable(_account) : 0;
-        feeUsd += getFundingFee(_indexToken, _isLong, _size, _entryFundingRate);
-        return discountable != 0 ? (feeUsd * discountable / BASIS_POINTS_DIVISOR) : feeUsd;
+        uint256 _loanDelta,
+        bool _isApplyTradingFee,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee
+    ) external view override returns (uint256, int256) {
+        require(address(positionKeeper) != address(0), "PositionKeeper not initialized");
+        Position memory position = positionKeeper.getPosition(_key);
+        require(position.owner != address(0) && position.size > 0, "Position notExist");
+
+        return getFees(
+            _sizeDelta,
+            _loanDelta,
+            _isApplyTradingFee,
+            _isApplyBorrowFee,
+            _isApplyFundingFee,
+            position
+        );
+    }
+
+    function getFees(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        bool _isApplyTradingFee,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        Position memory _position
+    ) public view returns (uint256, int256) {
+        uint256 tradingFee = 0;
+
+        if (_isApplyTradingFee) {
+            tradingFee = _sizeDelta == 0 ? 0
+                : getPositionFee(
+                    _position.indexToken,
+                    _position.isLong,
+                    _sizeDelta
+            );
+        }
+
+        if (_isApplyBorrowFee && _loanDelta > 0) {
+            tradingFee += getBorrowFee(_position.indexToken, _loanDelta, _position.lastIncreasedTime);
+        }
+
+        if (tradingFee > 0) {
+            tradingFee = getDiscountFee(_position.owner, tradingFee);
+        }
+
+        if (_position.previousFee > 0) {
+            tradingFee += _position.previousFee;
+        }
+
+        int256 fundingFee = 0;
+        
+        if (_isApplyFundingFee) {
+           fundingFee = getFundingFee(_position.indexToken, _position.isLong, _position.size, _position.entryFunding);
+        }
+
+        return (tradingFee, fundingFee);
+    }
+
+    function getDiscountFee(address _account, uint256 _fee) public view returns (uint256) {
+        if (referralSystem != address(0) && _fee > 0) {
+            (, uint256 discountPercentage, ) = IReferralSystem(referralSystem).getDiscountable(_account);
+
+            if (discountPercentage >= BASIS_POINTS_DIVISOR) {
+                discountPercentage = 0;
+            }
+
+            if (discountPercentage > 0) {
+                _fee -= _fee * discountPercentage / BASIS_POINTS_DIVISOR;
+            }
+        }
+
+        return _fee;
     }
 
     function getDelegates(address _master) external view override returns (address[] memory) {
@@ -428,7 +503,7 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
                         ? maxOpenInterestPerSide[_isLong]
                         : DEFAULT_MAX_OPEN_INTEREST
                 ),
-            "Exceed max open interest per side"
+            "MAX OI per side exceeded"
         );
         require(
             openInterestPerAsset[_indexToken] + _size <=
@@ -437,12 +512,17 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
                         ? maxOpenInterestPerAsset[_indexToken]
                         : DEFAULT_MAX_OPEN_INTEREST
                 ),
-            "Exceed max open interest per asset"
+            "MAX OI per asset exceeded"
         );
         require(
             openInterestPerUser[_account] + _size <=
                 (maxOpenInterestPerUser > 0 ? maxOpenInterestPerUser : DEFAULT_MAX_OPEN_INTEREST),
-            "Exceed max open interest per user"
+            "Max OI per user exceeded"
+        );
+        require(
+            openInterestPerAssetPerSide[_indexToken][_isLong] + _size <=
+                maxOpenInterestPerAssetPerSide[_indexToken][_isLong],
+            "Max OI per asset/size exceeded"
         );
     }
 
@@ -457,44 +537,8 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         return output;
     }
 
-    function getNextFundingRate(address _token, bool _isLong) internal view returns (uint256) {
-        uint256 intervals = (block.timestamp - lastFundingTimes[_token][_isLong]) / fundingInterval;
-
-        if (positionKeeper.poolAmounts(_token, _isLong) == 0) {
-            return 0;
-        }
-
-        return
-            ((
-                fundingRateFactor[_token][_isLong] > 0
-                    ? fundingRateFactor[_token][_isLong]
-                    : DEFAULT_FUNDING_RATE_FACTOR
-            ) *
-                positionKeeper.reservedAmounts(_token, _isLong) *
-                intervals) / positionKeeper.poolAmounts(_token, _isLong);
-    }
-
     function checkDelegation(address _master, address _delegate) public view override returns (bool) {
         return _master == _delegate || EnumerableSet.contains(_delegatesByMaster[_master], _delegate);
-    }
-
-    function getFundingFee(
-        address _indexToken,
-        bool _isLong,
-        uint256 _size,
-        uint256 _entryFundingRate
-    ) public view override returns (uint256) {
-        if (_size == 0) {
-            return 0;
-        }
-
-        uint256 fundingRate = cumulativeFundingRates[_indexToken][_isLong] - _entryFundingRate;
-
-        if (fundingRate == 0) {
-            return 0;
-        }
-
-        return (_size * fundingRate) / FUNDING_RATE_PRECISION;
     }
 
     function getPositionFee(
@@ -510,10 +554,14 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     }
 
     function isApprovalCollateralToken(address _token) external view override returns (bool) {
-        return _isApprovalCollateralToken(_token);
+        return _isApprovalCollateralToken(_token, false);
     }
 
-    function _isApprovalCollateralToken(address _token) internal view returns (bool) {
+    function isApprovalCollateralToken(address _token, bool _raise) external view override returns (bool) {
+        return _isApprovalCollateralToken(_token, _raise);
+    }
+
+    function _isApprovalCollateralToken(address _token, bool _raise) internal view returns (bool) {
         bool isStableToken = isStable[_token];
         bool isCollateralToken = isCollateral[_token];
         
@@ -521,31 +569,13 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
             revert("Invalid config, token should only belong to stable or collateral");
         }
 
-        return isStableToken || isCollateralToken;
-    }
+        bool isApproval = isStableToken || isCollateralToken;
 
-    /*
-    @dev: Validate collateral path and return shouldSwap
-    */
-    function validateCollateralPathAndCheckSwap(address[] memory _collateralPath) external override view returns (bool) {
-        if (isEnableNonStableCollateral) {
-            require(_collateralPath.length == 1, "Invalid collateral path length, must be 1");
-
-            if (!_isApprovalCollateralToken(_collateralPath[0])) { 
-                revert("Invalid approval collateral token");
-            }
-
-            return false;
-        } else {
-            require(_collateralPath.length == 1 || _collateralPath.length == 2, "Invalid collateral path length, must be 1 or 2");
-            require(isStable[_collateralPath[_collateralPath.length - 1]], "Invalid collateral path, last must be stable");
-
-            if (_collateralPath.length == 2 && !isCollateral[_collateralPath[0]]) {
-                revert("Invalid collateral path, first must be collateral");
-            }
-
-            return _collateralPath.length == 2;
+        if (_raise && !isApproval) {
+            revert("Invalid approval token");
         }
+
+        return isApproval;
     }
 
     function getFeeManager() external override view returns (address) {
@@ -556,5 +586,131 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     function setPriceMovementPercent(uint256 _priceMovementPercent) external onlyOwner {
         priceMovementPercent = _priceMovementPercent;
         emit SetPriceMovementPercent(_priceMovementPercent);
+    }
+
+    function getFundingRate(address _indexToken, address _collateralToken) public view override returns (int256) {
+        uint256 vaultPoolAmount = vault.poolAmounts(_collateralToken);
+
+        if (vaultPoolAmount == 0) {
+            return 0;
+        }
+
+        uint256 totalLong = positionKeeper.globalAmounts(_indexToken, true);
+        uint256 totalShort = positionKeeper.globalAmounts(_indexToken, false);
+        bool isLongOverShort = totalLong >= totalShort;
+        uint256 diff = isLongOverShort ? totalLong - totalShort : totalShort - totalLong;
+        int256 multiplier = isLongOverShort ? int256(1) : int256(-1);
+
+        uint256 fundingRate = (diff * fundingRateFactor[_indexToken] * basisFundingRateFactor * BASIS_POINTS_DIVISOR) 
+            / vaultPoolAmount;
+
+        if (fundingRate > maxFundingRate) {
+            fundingRate = maxFundingRate;
+        }
+        
+        return multiplier * int256(fundingRate);
+    }
+
+    function getBorrowFee(
+        address _indexToken,
+        uint256 _loanDelta,
+        uint256 _lastIncreasedTime
+    ) public view override returns (uint256) {
+        if (_loanDelta == 0) {
+            return 0;
+        }
+
+        uint256 feeFactor = borrowFeeFactor[_indexToken];
+
+        if (feeFactor == 0) {
+            feeFactor = defaultBorrowFeeFactor;
+        }
+
+        return feeFactor == 0 ? 0 
+            : ((block.timestamp - _lastIncreasedTime) * _loanDelta * feeFactor) /
+                BASIS_POINTS_DIVISOR /
+                1 hours;
+    }
+
+    function getFundingFee(
+        address _indexToken,
+        bool _isLong,
+        uint256 _size,
+        int256 _fundingIndex
+    ) public view override returns (int256) {
+        if (_fundingIndex == 0) {
+            return 0;
+        }
+
+        return
+            _isLong
+                ? (int256(_size) * (fundingIndex[_indexToken] - _fundingIndex)) / int256(FUNDING_RATE_PRECISION)
+                : (int256(_size) * (_fundingIndex - fundingIndex[_indexToken])) / int256(FUNDING_RATE_PRECISION);
+    }
+
+    function updateFunding(address _indexToken, address _collateralToken) external override {
+        require(msg.sender == address(positionHandler), "Forbidden");
+
+        if (lastFundingTimes[_indexToken] != 0) {
+            fundingIndex[_indexToken] += (getFundingRate(_indexToken, _collateralToken) 
+                * int256(block.timestamp - lastFundingTimes[_indexToken])) / int256(1 hours);
+
+            emit UpdateFunding(_indexToken, fundingIndex[_indexToken]);
+        }
+
+        lastFundingTimes[_indexToken] = block.timestamp;
+    }
+
+    /*
+    @dev: Validate collateral path and return shouldSwap
+    */
+    function validateCollateralPathAndCheckSwap(address[] memory _path) external override view returns (bool) {
+        require(_path.length > 1, "Invalid path length");
+        //Trading token index start from 1
+        address[] memory collateralPath = _extractCollateralPath(_path, 1);
+        uint256 collateralPathLength = collateralPath.length;
+
+        if (isEnableNonStableCollateral) {
+            require(collateralPathLength == 1, "Invalid collateral path length, must be 1");
+            _isApprovalCollateralToken(collateralPath[0], true);
+            return false;
+        } else {
+            require(collateralPathLength >= 1, "Invalid collateral path length");
+            require(isStable[collateralPath[collateralPathLength - 1]], "Last collateral path must be stable");
+
+            if (collateralPathLength > 1 && !isCollateral[collateralPath[0]]) {
+                revert("First collateral path must be collateral");
+            }
+
+            return collateralPath.length > 1;
+        }
+    }
+
+    function _extractCollateralPath(address[] memory _path, uint256 _startIndex) internal pure returns (address[] memory) {
+        require(_path.length > 1 && _path.length <= 3, "Invalid path length");
+        address[] memory newPath;
+
+        if (_path.length == 2 && _startIndex == 1) {
+            newPath = new address[](1);
+            newPath[0] = _path[1];
+            return newPath;
+        }
+
+        require(_startIndex < _path.length - 1, "Invalid start index");
+        newPath = new address[](_path.length - _startIndex);
+        uint256 count = 0;
+
+        for (uint256 i = _startIndex; i < _path.length; i++) {
+            newPath[count] = _path[i];
+            count++;
+        }
+
+        return newPath;
+    }
+
+    function _setMaxFundingRate(uint256 _maxFundingRate) internal {
+        require(_maxFundingRate < FUNDING_RATE_PRECISION, "Invalid maxFundingRate");
+        maxFundingRate = _maxFundingRate;
+        emit SetMaxFundingRate(_maxFundingRate);
     }
 }

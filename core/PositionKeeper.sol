@@ -12,33 +12,37 @@ import "./interfaces/IPositionKeeper.sol";
 import "./interfaces/IPositionHandler.sol";
 import "./interfaces/IPriceManager.sol";
 import "./interfaces/ISettingsManager.sol";
-import "./interfaces/IRouter.sol";
+import "./interfaces/IPositionRouter.sol";
 import "../tokens/interfaces/IMintable.sol";
 
-import  "../constants/BasePositionConstants.sol";
-import {PositionBond} from "../constants/Structs.sol";
+import  "../constants/PositionConstants.sol";
 
-contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGuard, Ownable {
-    address public router;
+contract PositionKeeper is PositionConstants, IPositionKeeper, ReentrancyGuard, Ownable {
+    address public positionRouter;
     address public positionHandler;
     address public settingsManager;
+    address public priceManager;
+
+    uint256 public shortsTrackerAveragePriceWeight;
 
     mapping(address => uint256) public override lastPositionIndex;
     mapping(bytes32 => Position) public positions;
     mapping(bytes32 => OrderInfo) public orders;
     mapping(bytes32 => FinalPath) public finalPaths;
 
-    mapping(address => mapping(bool => uint256)) public override poolAmounts;
-    mapping(address => mapping(bool => uint256)) public override reservedAmounts;
+    mapping(bytes32 => uint256) public override leverages;
+    mapping(address => mapping(bool => uint256)) public override globalAmounts; //Global long/short trading amount
+    mapping (address => uint256) public globalShortAveragePrices;
 
     struct FinalPath {
         address indexToken;
         address collateralToken;
     }
 
-    event SetRouter(address router);
+    event SetRouter(address positionRouter);
     event SetPositionHandler(address positionHandler);
     event SetSettingsManager(address settingsManager);
+    event SetPriceManager(address priceManager);
     event NewOrder(
         bytes32 key,
         address indexed account,
@@ -47,7 +51,6 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         uint256 positionType,
         OrderStatus orderStatus,
         address[] path,
-        uint256 collateralIndex,
         uint256[] triggerData
     );
     event AddOrRemoveCollateral(
@@ -84,14 +87,16 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         address indexed indexToken,
         bool isLong,
         uint256 posId,
-        uint256[7] posData
+        int256 entryFunding,
+        uint256[6] posData
     );
     event ClosePosition(
         bytes32 key, 
         int256 realisedPnl, 
         uint256 markPrice, 
-        uint256 feeUsd, 
-        uint256[2] posData
+        uint256[2] posData,
+        uint256 tradingFee,
+        int256 fundingFee
     );
     event DecreasePosition(
         bytes32 key,
@@ -99,14 +104,14 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         address indexed indexToken,
         bool isLong,
         uint256 posId,
+        uint256[5] posData,
         int256 realisedPnl,
-        uint256[7] posData
+        int256 entryFunding,
+        uint256 tradingFee,
+        int256 fundingFee
     );
     event LiquidatePosition(bytes32 key, int256 realisedPnl, uint256 markPrice, uint256 feeUsd);
-    event DecreasePoolAmount(address indexed token, bool isLong, uint256 amount);
-    event DecreaseReservedAmount(address indexed token, bool isLong, uint256 amount);
-    event IncreasePoolAmount(address indexed token, bool isLong, uint256 amount);
-    event IncreaseReservedAmount(address indexed token, bool isLong, uint256 amount);
+    event GlobalShortDataUpdated(address indexed token, uint256 globalShortSize, uint256 globalShortAveragePrice);
     
     modifier onlyPositionHandler() {
         require(positionHandler != address(0) && msg.sender == positionHandler, "Forbidden");
@@ -114,9 +119,9 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
     }
     
     //Config functions
-    function setRouter(address _router) external onlyOwner {
-        require(Address.isContract(_router), "Invalid router");
-        router = _router;
+    function setPositionRouter(address _router) external onlyOwner {
+        require(Address.isContract(_router), "Invalid positionRouter");
+        positionRouter = _router;
         emit SetRouter(_router);
     }
 
@@ -131,13 +136,18 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         settingsManager = _setttingsManager;
         emit SetSettingsManager(_setttingsManager);
     }
+
+    function setPriceManager(address _priceManager) external onlyOwner {
+        require(Address.isContract(_priceManager), "Invalid priceManager");
+        priceManager = _priceManager;
+        emit SetPriceManager(_priceManager);
+    }
     //End config functions
 
     function openNewPosition(
         bytes32 _key,
         bool _isLong, 
         uint256 _posId,
-        uint256 _collateralIndex,
         address[] memory _path,
         uint256[] memory _params,
         bytes memory _data
@@ -154,7 +164,7 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         }
 
         if (finalPaths[_key].collateralToken == address(0)) {
-            finalPaths[_key].collateralToken = _path[_collateralIndex];
+            finalPaths[_key].collateralToken = _path[_path.length - 1];
             finalPaths[_key].indexToken = _path[0];
         }
 
@@ -166,7 +176,6 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
             order.positionType, 
             order.status, 
             _path,
-            _collateralIndex,
             _params
         );
 
@@ -176,6 +185,8 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
     function unpackAndStorage(bytes32 _key, bytes memory _data, DataType _dataType) external nonReentrant onlyPositionHandler {
         if (_dataType == DataType.POSITION) {
             positions[_key] = abi.decode(_data, (Position));
+            uint256 leverage = positions[_key].size == 0 && positions[_key].collateral == 0 ? 0 : positions[_key].size * BASIS_POINTS_DIVISOR / positions[_key].collateral;
+            leverages[_key] = leverage;
         } else if (_dataType == DataType.ORDER) {
             orders[_key] = abi.decode(_data, (OrderInfo));
         } else {
@@ -201,28 +212,6 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         }
 
         delete positions[_key];
-    }
-
-    function increaseReservedAmount(address _token, bool _isLong, uint256 _amount) external override nonReentrant onlyPositionHandler {
-        reservedAmounts[_token][_isLong] += _amount;
-        emit IncreaseReservedAmount(_token, _isLong, reservedAmounts[_token][_isLong]);
-    }
-
-    function decreaseReservedAmount(address _token, bool _isLong, uint256 _amount) external override nonReentrant onlyPositionHandler {
-        require(reservedAmounts[_token][_isLong] >= _amount, "Vault: reservedAmounts exceeded");
-        reservedAmounts[_token][_isLong] -= _amount;
-        emit DecreaseReservedAmount(_token, _isLong, reservedAmounts[_token][_isLong]);
-    }
-
-    function increasePoolAmount(address _indexToken, bool _isLong, uint256 _amount) external override nonReentrant onlyPositionHandler {
-        poolAmounts[_indexToken][_isLong] += _amount;
-        emit IncreasePoolAmount(_indexToken, _isLong, poolAmounts[_indexToken][_isLong]);
-    }
-
-    function decreasePoolAmount(address _indexToken, bool _isLong, uint256 _amount) external override nonReentrant onlyPositionHandler {
-        require(poolAmounts[_indexToken][_isLong] >= _amount, "Vault: poolAmount exceeded");
-        poolAmounts[_indexToken][_isLong] -= _amount;
-        emit DecreasePoolAmount(_indexToken, _isLong, poolAmounts[_indexToken][_isLong]);
     }
 
     //Emit event functions
@@ -298,24 +287,24 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
     function emitIncreasePositionEvent(
         bytes32 _key,
         uint256 _indexPrice,
-        uint256 _fee,
         uint256 _collateralDelta,
-        uint256 _sizeDelta
+        uint256 _sizeDelta,
+        uint256 _fee
     ) external nonReentrant onlyPositionHandler {
         Position memory position = positions[_key];
-        PositionBond memory bond = IRouter(router).getBond(_key);
+        globalAmounts[position.indexToken][position.isLong] += _sizeDelta;
 
         emit IncreasePosition(
             _key,
             position.owner,
-            bond.indexToken,
-            bond.isLong,
-            bond.posId,
+            position.indexToken,
+            position.isLong,
+            position.posId,
+            position.entryFunding,
             [
                 _collateralDelta,
                 _sizeDelta,
                 position.reserveAmount,
-                position.entryFundingRate,
                 position.averagePrice,
                 _indexPrice,
                 _fee
@@ -326,79 +315,67 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
     function emitDecreasePositionEvent(
         bytes32 _key,
         uint256 _indexPrice,
-        uint256 _fee,
         uint256 _collateralDelta,
-        uint256 _sizeDelta
+        uint256 _sizeDelta,
+        uint256 _tradingFee,
+        int256 _fundingFee,
+        bool _isPartialClose
     ) external override onlyPositionHandler {
         Position memory position = positions[_key];
-        PositionBond memory bond = IRouter(router).getBond(_key);
-        emit DecreasePosition(
-            _key,
-            position.owner,
-            bond.indexToken,
-            bond.isLong,
-            bond.posId,
-            position.realisedPnl,
-            [
-                _collateralDelta,
-                _sizeDelta,
-                position.reserveAmount,
-                position.entryFundingRate,
-                position.averagePrice,
-                _indexPrice,
-                _fee
-            ]
-        );
+        _decreaseGlobalAmount(_sizeDelta, position.indexToken, position.isLong);
+
+        if (_isPartialClose) {
+            emit DecreasePosition(
+                _key,
+                position.owner,
+                position.indexToken,
+                position.isLong,
+                position.posId,
+                [
+                    _collateralDelta,
+                    _sizeDelta,
+                    position.reserveAmount,
+                    position.averagePrice,
+                    _indexPrice
+                ],
+                position.realisedPnl,
+                position.entryFunding,
+                _tradingFee,
+                _fundingFee
+            );
+        } else {
+            delete leverages[_key];
+            emit ClosePosition(
+                _key, 
+                position.realisedPnl, 
+                _indexPrice, 
+                [
+                    _collateralDelta, 
+                    _sizeDelta
+                ],
+                _tradingFee,
+                _fundingFee
+            );
+            delete positions[_key];
+        }
     }
 
-    function emitClosePositionEvent(
-        bytes32 _key,
-        uint256 _indexPrice,
-        uint256 _collateralDelta,
-        uint256 _sizeDelta
-    ) external override onlyPositionHandler {
-        Position memory position = positions[_key];
-        PositionBond memory bond = IRouter(router).getBond(_key);
-        _validateSettingsManager();
-        uint256 migrateFeeUsd = ISettingsManager(settingsManager).collectMarginFees(
-            position.owner,
-            bond.indexToken,
-            bond.isLong,
-            position.size,
-            position.size,
-            position.entryFundingRate
-        );
-        delete positions[_key];
-        emit ClosePosition(
-            _key, 
-            position.realisedPnl, 
-            _indexPrice, 
-            migrateFeeUsd, 
-            [
-                _collateralDelta, 
-                _sizeDelta
-            ]
-        );
+    function _decreaseGlobalAmount(uint256 _sizeDelta, address _indexToken, bool _isLong) internal {
+        uint256 globalAmount = globalAmounts[_indexToken][_isLong];
+        uint256 decreaseGlobalAmount = _sizeDelta > globalAmount ? globalAmount : _sizeDelta;
+        globalAmounts[_indexToken][_isLong] -= decreaseGlobalAmount;
     }
 
     function emitLiquidatePositionEvent(
         bytes32 _key,
-        address _indexToken,
-        bool _isLong,
-        uint256 _indexPrice
+        uint256 _indexPrice,
+        uint256 _fee
     ) external override onlyPositionHandler {
         Position memory position = positions[_key];
         _validateSettingsManager();
-        uint256 migrateFeeUsd = ISettingsManager(settingsManager).collectMarginFees(
-            position.owner,
-            _indexToken,
-            _isLong,
-            position.size,
-            position.size,
-            position.entryFundingRate
-        );
+        _decreaseGlobalAmount(position.size, position.indexToken, position.isLong);
+        emit LiquidatePosition(_key, position.realisedPnl, _indexPrice, _fee);
         delete positions[_key];
-        emit LiquidatePosition(_key, position.realisedPnl, _indexPrice, migrateFeeUsd);
     }
     //End emit event functions
 
@@ -436,8 +413,8 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         return orders[_key];
     }
 
-    function getPositionFee(bytes32 _key) external override view returns (uint256) {
-        return positions[_key].totalFee;
+    function getPositionPreviousFee(bytes32 _key) external override view returns (uint256) {
+        return positions[_key].previousFee;
     }
 
     function getPositionSize(bytes32 _key) external override view returns (uint256) {
@@ -463,7 +440,174 @@ contract PositionKeeper is BasePositionConstants, IPositionKeeper, ReentrancyGua
         return positions[_key].owner;
     }
 
+    function getPositionType(bytes32 _key) external override view returns (bool) {
+        return positions[_key].isLong;
+    }
+
+    function getBasePosition(bytes32 _key) external override view returns (address, address, bool, uint256) {
+        return (positions[_key].owner, positions[_key].indexToken, positions[_key].isLong, positions[_key].posId);
+    }
+
+    function setShortsTrackerAveragePriceWeight(uint256 _shortsTrackerAveragePriceWeight) external onlyOwner {
+        require(shortsTrackerAveragePriceWeight <= BASIS_POINTS_DIVISOR, "Invalid weight");
+        shortsTrackerAveragePriceWeight = _shortsTrackerAveragePriceWeight;
+    }
+
+    function getGlobalShortDelta(address _token) public view returns (bool, uint256) {
+        uint256 size = globalAmounts[_token][false];
+        uint256 averagePrice = globalShortAveragePrices[_token];
+        if (size == 0) { return (false, 0); }
+
+        uint256 nextPrice = IPriceManager(priceManager).getLastPrice(_token);
+        uint256 priceDelta = averagePrice > nextPrice ? averagePrice - nextPrice : nextPrice - averagePrice;
+        uint256 delta = (size * priceDelta) / averagePrice;
+        bool hasProfit = averagePrice > nextPrice;
+
+        return (hasProfit, delta);
+    }
+
+    function updateGlobalShortData(
+        bytes32 _key,
+        uint256 _sizeDelta,
+        uint256 _indexPrice,
+        bool _isIncrease
+    ) external {
+        require(msg.sender == address(positionHandler), "Forbidden");
+        Position memory position = positions[_key];
+
+        if (position.isLong || _sizeDelta == 0) {
+            return;
+        }
+
+        (uint256 globalShortSize, uint256 globalShortAveragePrice) = getNextGlobalShortData(
+            _indexPrice,
+            _sizeDelta,
+            _isIncrease,
+            position
+        );
+
+        globalShortAveragePrices[position.indexToken] = globalShortAveragePrice;
+        emit GlobalShortDataUpdated(position.indexToken, globalShortSize, globalShortAveragePrice);
+    }
+
+    function getNextGlobalShortData(
+        uint256 _indexPrice,
+        uint256 _sizeDelta,
+        bool _isIncrease,
+        Position memory _position
+    ) public view returns (uint256, uint256) {
+        int256 realisedPnl = _getRealisedPnl(_sizeDelta, _isIncrease, _position);
+        uint256 averagePrice = globalShortAveragePrices[_position.indexToken];
+        uint256 priceDelta = averagePrice > _indexPrice ? averagePrice - _indexPrice : _indexPrice - averagePrice;
+
+        uint256 nextSize;
+        uint256 delta;
+
+        {
+            uint256 size = globalAmounts[_position.indexToken][false];
+            nextSize = _isIncrease ? size + _sizeDelta : size - _sizeDelta;
+
+            if (nextSize == 0) {
+                return (0, 0);
+            }
+
+            if (averagePrice == 0) {
+                return (nextSize, _indexPrice);
+            }
+
+            delta = (size * priceDelta) / averagePrice;
+        }
+
+        uint256 nextAveragePrice = _getNextGlobalAveragePrice(
+            averagePrice,
+            _indexPrice,
+            nextSize,
+            delta,
+            realisedPnl
+        );
+
+        return (nextSize, nextAveragePrice);
+    }
+
+    function _getNextGlobalAveragePrice(
+        uint256 _averagePrice,
+        uint256 _indexPrice,
+        uint256 _nextSize,
+        uint256 _delta,
+        int256 _realisedPnl
+    ) public pure returns (uint256) {
+        (bool hasProfit, uint256 nextDelta) = _getNextDelta(_delta, _averagePrice, _indexPrice, _realisedPnl);
+        uint256 nextAveragePrice = (_indexPrice
+            * _nextSize)
+            / (hasProfit ? _nextSize - nextDelta : _nextSize + nextDelta);
+
+        return nextAveragePrice;
+    }
+
+    function _getNextDelta(
+        uint256 _delta,
+        uint256 _averagePrice,
+        uint256 _indexPrice,
+        int256 _realisedPnl
+    ) internal pure returns (bool, uint256) {
+        bool hasProfit = _averagePrice > _indexPrice;
+
+        if (hasProfit) {
+            // global shorts pnl is positive
+            if (_realisedPnl > 0) {
+                if (uint256(_realisedPnl) > _delta) {
+                    _delta = uint256(_realisedPnl) - _delta;
+                    hasProfit = false;
+                } else {
+                    _delta = _delta - uint256(_realisedPnl);
+                }
+            } else {
+                _delta = _delta + uint256(-_realisedPnl);
+            }
+
+            return (hasProfit, _delta);
+        }
+
+        if (_realisedPnl > 0) {
+            _delta = _delta + uint256(_realisedPnl);
+        } else {
+            if (uint256(-_realisedPnl) > _delta) {
+                _delta = uint256(-_realisedPnl) - _delta;
+                hasProfit = true;
+            } else {
+                _delta = _delta - uint256(-_realisedPnl);
+            }
+        }
+        return (hasProfit, _delta);
+    }
+
+    function _getRealisedPnl(
+        uint256 _sizeDelta,
+        bool _isIncrease,
+        Position memory _position
+    ) internal view returns (int256) {
+        if (_isIncrease) {
+            return 0;
+        }
+
+        (bool hasProfit, uint256 delta) = IPriceManager(priceManager).getDelta(
+            _position.indexToken,
+            _position.size,
+            _position.averagePrice,
+            _position.isLong, 
+            0
+        );
+        // Get the proportional change in pnl
+        uint256 adjustedDelta = (_sizeDelta * delta) / _position.size;
+        require(adjustedDelta < uint256(type(int256).max), "Overflow");
+        return hasProfit ? int256(adjustedDelta) : -int256(adjustedDelta);
+    }
+
     function _validateSettingsManager() internal view {
         require(settingsManager != address(0), "Settings manager not initialzied");
+    }
+
+    function _validateRouter() internal view {
+         require(positionRouter != address(0), "Router not initialzied");
     }
 }

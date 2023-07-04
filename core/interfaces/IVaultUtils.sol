@@ -6,26 +6,28 @@ import {Position, OrderInfo, OrderType} from "../../constants/Structs.sol";
 
 interface IVaultUtils {
     function validateConfirmDelay(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
         bool _raise
     ) external view returns (bool);
 
     function validateDecreasePosition(
-        address _indexToken,
-        bool _isLong,
         bool _raise, 
         uint256 _indexPrice,
         Position memory _position
     ) external view returns (bool);
 
     function validateLiquidation(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        bool _raise, 
+        bytes32 _key,
+        bool _raise,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        uint256 _indexPrice
+    ) external view returns (uint256, uint256);
+
+    function validateLiquidation(
+        bool _raise,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
         uint256 _indexPrice,
         Position memory _position
     ) external view returns (uint256, uint256);
@@ -66,50 +68,62 @@ interface IVaultUtils {
         uint256 _indexPrice
     ) external view returns (uint8);
 
-    function validateAmountIn(
-        address _collateralToken,
+    function validateAddOrRemoveCollateral(
+        bytes32 _key,
         uint256 _amountIn,
+        bool _isPlus,
+        address _collateralToken,
+        uint256 _indexPrice,
         uint256 _collateralPrice
-    ) external view returns (uint256);
+    ) external returns (uint256, Position memory);
 
-    function validateAddCollateral(
+    function validateAddOrRemoveCollateral(
         uint256 _amountIn,
+        bool _isPlus,
         address _collateralToken,
+        uint256 _indexPrice,
         uint256 _collateralPrice,
-        bytes32 _key
-    ) external view returns (uint256);
-
-    function validateAddCollateral(
-        uint256 _positionSize, 
-        uint256 _positionCollateral, 
-        uint256 _amountIn,
-        address _collateralToken,
-        uint256 _collateralPrice
-    ) external view returns (uint256);
-
-    function validateRemoveCollateral(
-        uint256 _amountIn, 
-        bool _isLong,
-        address _indexToken,
-        uint256 _indexPrice,
-        bytes32 _key
-    ) external;
-
-    function validateRemoveCollateral(
-        uint256 _amountIn, 
-        bool _isLong,
-        address _indexToken,
-        uint256 _indexPrice,
         Position memory _position
-    ) external;
+    ) external returns (uint256, Position memory);
 
     function beforeDecreasePosition(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
+        address _collateralToken,
+        uint256 _sizeDelta,
+        uint256 _indexPrice
+    ) external view returns (bool, int256, uint256[4] memory, Position memory);
+
+    function beforeDecreasePosition(
+        address _collateralToken,
         uint256 _sizeDelta,
         uint256 _indexPrice,
-        bool _isInternal
-    ) external view returns (uint256[4] memory, bool, bool, Position memory);
+        Position memory _position
+    ) external view returns (bool, int256, bytes memory);
+
+    function calculatePnl(
+        bytes32 _key,
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        bool _isLiquidated
+    ) external view returns (bool, uint256, uint256, int256);
+
+    function calculatePnl(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        bool _isLiquidated,
+        Position memory _position
+    ) external view returns (bool, uint256, uint256, int256);
+
+    function reCalculatePosition(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice, 
+        Position memory _position
+    ) external view returns (uint256, int256);
 }

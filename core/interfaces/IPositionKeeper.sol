@@ -11,15 +11,14 @@ import {
 } from "../../constants/Structs.sol";
 
 interface IPositionKeeper {
-    function poolAmounts(address _token, bool _isLong) external view returns (uint256);
+    function leverages(bytes32 _key) external returns (uint256);
 
-    function reservedAmounts(address _token, bool _isLong) external view returns (uint256);
+    function globalAmounts(address _token, bool _isLong) external view returns (uint256);
 
     function openNewPosition(
         bytes32 _key,
         bool _isLong, 
         uint256 _posId,
-        uint256 _collateralIndex,
         address[] memory _path,
         uint256[] memory _params,
         bytes memory _data
@@ -32,14 +31,6 @@ interface IPositionKeeper {
     function deleteOrder(bytes32 _key) external;
 
     function deletePositions(bytes32 _key) external;
-
-    function increaseReservedAmount(address _token, bool _isLong, uint256 _amount) external;
-
-    function decreaseReservedAmount(address _token, bool _isLong, uint256 _amount) external;
-
-    function increasePoolAmount(address _indexToken, bool _isLong, uint256 _amount) external;
-
-    function decreasePoolAmount(address _indexToken, bool _isLong, uint256 _amount) external;
 
     //Emit event functions
     function emitAddPositionEvent(
@@ -85,31 +76,32 @@ interface IPositionKeeper {
     function emitIncreasePositionEvent(
         bytes32 _key,
         uint256 _indexPrice,
-        uint256 _fee,
         uint256 _collateralDelta,
-        uint256 _sizeDelta
+        uint256 _sizeDelta,
+        uint256 _fee
     ) external;
 
     function emitDecreasePositionEvent(
         bytes32 _key,
         uint256 _indexPrice,
-        uint256 _fee,
         uint256 _collateralDelta,
-        uint256 _sizeDelta
-    ) external;
-
-    function emitClosePositionEvent(
-        bytes32 _key,
-        uint256 _indexPrice,
-        uint256 _collateralDelta,
-        uint256 _sizeDelta
-    ) external;
+        uint256 _sizeDelta,
+        uint256 tradingFee,
+        int256 _fundingFee,
+        bool _isPartialClose
+    ) external ;
 
     function emitLiquidatePositionEvent(
         bytes32 _key,
-        address _indexToken,
-        bool _isLong,
-        uint256 _indexPrice
+        uint256 _indexPrice,
+        uint256 _fee
+    ) external;
+
+    function updateGlobalShortData(
+        bytes32 _key,
+        uint256 _sizeDelta,
+        uint256 _indexPrice,
+        bool _isIncrease
     ) external;
 
     //View functions
@@ -133,7 +125,7 @@ interface IPositionKeeper {
 
     function getOrder(bytes32 _key) external view returns (OrderInfo memory);
 
-    function getPositionFee(bytes32 _key) external view returns (uint256);
+    function getPositionPreviousFee(bytes32 _key) external view returns (uint256);
 
     function getPositionSize(bytes32 _key) external view returns (uint256);
 
@@ -146,4 +138,10 @@ interface IPositionKeeper {
     function getPositionFinalPath(bytes32 _key) external view returns (address[] memory);
 
     function lastPositionIndex(address _account) external view returns (uint256);
+
+    function getBasePosition(bytes32 _key) external view returns (address, address, bool, uint256);
+
+    function getPositionType(bytes32 _key) external view returns (bool);
+
+    function getGlobalShortDelta(address _token) external view returns (bool, uint256);
 }

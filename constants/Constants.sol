@@ -18,7 +18,9 @@ contract Constants is BaseConstants, BasePositionConstants {
     
     uint256 public constant DEFAULT_MAX_OPEN_INTEREST = 10000000000 * PRICE_PRECISION;
 
-    uint256 public constant FUNDING_RATE_PRECISION = 1000000;
+    uint256 public constant FUNDING_RATE_PRECISION = BASIS_POINTS_DIVISOR ** 3; // 1e15
+    uint256 public constant MAX_FUNDING_RATE = FUNDING_RATE_PRECISION / 10; // 10% per hour
+
     uint256 public constant LIQUIDATE_NONE_EXCEED = 0;
     uint256 public constant LIQUIDATE_FEE_EXCEED = 1;
     uint256 public constant LIQUIDATE_THRESHOLD_EXCEED = 2;

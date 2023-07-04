@@ -8,54 +8,61 @@ import "./interfaces/IPositionKeeper.sol";
 import "./interfaces/IPriceManager.sol";
 import "./interfaces/ISettingsManager.sol";
 import "./interfaces/IVaultUtils.sol";
-import "./interfaces/IRouter.sol";
+import "./interfaces/IPositionRouter.sol";
+import "./interfaces/IVault.sol";
 
 import {Constants} from "../constants/Constants.sol";
 import {BasePositionConstants} from "../constants/BasePositionConstants.sol";
-import {PositionBond, Position, OrderInfo, PrepareTransaction, OrderStatus} from "../constants/Structs.sol";
+import {Position, OrderInfo, PrepareTransaction, OrderStatus} from "../constants/Structs.sol";
 
 contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     IPositionKeeper public positionKeeper;
     IPriceManager public priceManager;
     ISettingsManager public settingsManager;
-    address public router;
+    IVault public vault;
+    address public positionRouter;
     address public positionHandler;
 
-    event SetRouter(address router);
+    event SetPositionRouter(address positionRouter);
     event SetPositionHandler(address positionHandler);
     event SetPositionKeeper(address positionKeeper);
+    event SetVault(address vault);
 
     constructor(address _priceManager, address _settingsManager) {
         priceManager = IPriceManager(_priceManager);
         settingsManager = ISettingsManager(_settingsManager);
     }
 
-    function setRouter(address _router) external onlyOwner {
-        require(Address.isContract(_router), "Invalid router");
-        router = _router;
-        emit SetRouter(_router);
+    function setPositionRouter(address _positionRouter) external onlyOwner {
+        _isValidContract(_positionRouter);
+        positionRouter = _positionRouter;
+        emit SetPositionRouter(_positionRouter);
     }
 
     function setPositionHandler(address _positionHandler) external onlyOwner {
-        require(Address.isContract(_positionHandler), "Invalid positionHandler");
+        _isValidContract(_positionHandler);
         positionHandler = _positionHandler;
         emit SetPositionHandler(_positionHandler);
     }
 
     function setPositionKeeper(address _positionKeeper) external onlyOwner {
-        require(Address.isContract(_positionKeeper), "PostionKeeper invalid");
+        _isValidContract(_positionKeeper);
         positionKeeper = IPositionKeeper(_positionKeeper);
         emit SetPositionKeeper(_positionKeeper);
     }
 
+    function setVault(address _vault) external onlyOwner {
+        _isValidContract(_vault);
+        vault = IVault(_vault);
+        emit SetVault(_vault);
+    }
+
     function validateConfirmDelay(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
         bool _raise
     ) external view override returns (bool) {
-        PrepareTransaction memory transaction = IRouter(router).getTransaction(_getPositionKey(_account, _indexToken, _isLong, _posId));
+        _isValidContract(address(positionRouter));
+        PrepareTransaction memory transaction = IPositionRouter(positionRouter).getTransaction(_key);
         bool validateFlag;
         
         // uint256 public constant ADD_POSITION = 7;
@@ -77,15 +84,11 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     }
 
     function validateDecreasePosition(
-        address _indexToken,
-        bool _isLong,
         bool _raise, 
         uint256 _indexPrice,
         Position memory _position
     ) external view override returns (bool) {
         return _validateDecreasePosition(
-            _indexToken,
-            _isLong,
             _raise, 
             _indexPrice,
             _position
@@ -93,14 +96,12 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     }
 
      function _validateDecreasePosition(
-        address _indexToken,
-        bool _isLong,
         bool _raise, 
         uint256 _indexPrice,
         Position memory _position
     ) internal view returns (bool) {
         bool validateFlag;
-        (bool hasProfit, ) = priceManager.getDelta(_indexToken, _position.size, _position.averagePrice, _isLong, _indexPrice);
+        (bool hasProfit, ) = priceManager.getDelta(_position.indexToken, _position.size, _position.averagePrice, _position.isLong, _indexPrice);
 
         if (hasProfit) {
             if (
@@ -109,13 +110,13 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             ) {
                 validateFlag = true;
             } else {
-                uint256 price = _indexPrice > 0 ? _indexPrice : priceManager.getLastPrice(_indexToken);
+                uint256 price = _indexPrice > 0 ? _indexPrice : priceManager.getLastPrice(_position.indexToken);
 
                 if (
-                    (_isLong &&
+                    (_position.isLong &&
                         price * BASIS_POINTS_DIVISOR >=
                         (BASIS_POINTS_DIVISOR + settingsManager.priceMovementPercent()) * _position.lastPrice) ||
-                    (!_isLong &&
+                    (!_position.isLong &&
                         price * BASIS_POINTS_DIVISOR <=
                         (BASIS_POINTS_DIVISOR - settingsManager.priceMovementPercent()) * _position.lastPrice)
                 ) {
@@ -133,47 +134,40 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         return validateFlag;
     }
 
-     function validateLiquidation(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        bool _raise, 
-        uint256 _indexPrice,
-        Position memory _position
-    ) external view override returns (uint256, uint256) {
-        return _validateLiquidation(
-            _account,
-            _indexToken,
-            _isLong,
+    function validateLiquidation(
+        bytes32 _key,
+        bool _raise,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        uint256 _indexPrice
+    ) external view returns (uint256, uint256) {
+        _isValidContract(address(positionKeeper));
+        Position memory position = positionKeeper.getPosition(_key);
+        return validateLiquidation(
             _raise, 
+            _isApplyBorrowFee, 
+            _isApplyFundingFee,
             _indexPrice,
-            _position
+            position
         );
     }
 
-    function _validateLiquidation(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        bool _raise, 
+    function validateLiquidation(
+        bool _raise,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
         uint256 _indexPrice,
         Position memory _position
-    ) internal view returns (uint256, uint256) {
+    ) public view returns (uint256, uint256) {
         if (_position.averagePrice > 0) {
-            (bool hasProfit, uint256 delta) = priceManager.getDelta(
-                _indexToken,
+            (bool hasProfit, uint256 delta, uint256 tradingFee, ) = calculatePnl(
                 _position.size,
-                _position.averagePrice,
-                _isLong,
-                _indexPrice
-            );
-            uint256 migrateFeeUsd = settingsManager.collectMarginFees(
-                _account,
-                _indexToken,
-                _isLong,
-                _position.size,
-                _position.size,
-                _position.entryFundingRate
+                _position.size - _position.collateral,
+                _indexPrice,
+                _isApplyBorrowFee,
+                _isApplyFundingFee,
+                true,
+                _position
             );
 
             if (!hasProfit && _position.collateral < delta) {
@@ -181,7 +175,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
                     revert("Vault: Losses exceed collateral");
                 }
                 
-                return (LIQUIDATE_FEE_EXCEED, migrateFeeUsd);
+                return (LIQUIDATE_FEE_EXCEED, _position.collateral);
             }
 
             uint256 remainingCollateral = _position.collateral;
@@ -190,13 +184,13 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
                 remainingCollateral = _position.collateral - delta;
             }
 
-            if (_position.collateral * priceManager.maxLeverage(_indexToken) < _position.size * MIN_LEVERAGE) {
+            if (_position.collateral * priceManager.maxLeverage(_position.indexToken) < _position.size * MIN_LEVERAGE) {
                 if (_raise) {
                     revert("Vault: Max leverage exceeded");
                 }
             }
 
-            return _checkMaxThreshold(remainingCollateral, _position.size, migrateFeeUsd, _indexToken, _raise);
+            return _checkMaxThreshold(remainingCollateral, _position.size, tradingFee, _position.indexToken, _raise);
         } else {
             return (LIQUIDATE_NONE_EXCEED, 0);
         }
@@ -339,7 +333,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         uint256 _indexPrice
     ) external view override returns (uint8) {
         return _validateTrigger(
-            IRouter(router).getBond(_key).isLong,
+            positionKeeper.getPositionType(_key),
             _indexPrice,
             positionKeeper.getOrder(_key)
         );
@@ -416,37 +410,37 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     function _checkMaxThreshold(
         uint256 _collateral,
         uint256 _size,
-        uint256 _marginFees,
+        uint256 _fee,
         address _indexToken,
         bool _raise
     ) internal view returns (uint256, uint256) {
-        if (_collateral < _marginFees) {
+        if (_collateral < _fee) {
             if (_raise) {
                 revert("Vault: Fees exceed collateral");
             }
-            // cap the fees to the remainingCollateral
+            //Cap the fees to the remainingCollateral
             return (LIQUIDATE_FEE_EXCEED, _collateral);
         }
 
-        if (_collateral < _marginFees + settingsManager.liquidationFeeUsd()) {
+        if (_collateral < _fee + settingsManager.liquidationFeeUsd()) {
             if (_raise) {
                 revert("Vault: Liquidation fees exceed collateral");
             }
-            return (LIQUIDATE_FEE_EXCEED, _marginFees);
+            return (LIQUIDATE_FEE_EXCEED, _fee);
         }
 
         if (
-            _collateral - (_marginFees + settingsManager.liquidationFeeUsd()) <
+            _collateral - (_fee + settingsManager.liquidationFeeUsd()) <
             (_size * (BASIS_POINTS_DIVISOR - settingsManager.liquidateThreshold(_indexToken))) / BASIS_POINTS_DIVISOR
         ) {
             if (_raise) {
                 revert("Vault: Max threshold exceeded");
             }
             
-            return (LIQUIDATE_THRESHOLD_EXCEED, _marginFees + settingsManager.liquidationFeeUsd());
+            return (LIQUIDATE_THRESHOLD_EXCEED, _fee + settingsManager.liquidationFeeUsd());
         }
 
-        return (LIQUIDATE_NONE_EXCEED, _marginFees);
+        return (LIQUIDATE_NONE_EXCEED, _fee);
     }
 
     function setPriceManagerForDev(address _priceManager) external onlyOwner {
@@ -473,23 +467,6 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         return true;
     }
 
-    function validateAddCollateral(
-        uint256 _amountIn,
-        address _collateralToken,
-        uint256 _collateralPrice,
-        bytes32 _key
-    ) external view returns (uint256) {
-        Position memory position = positionKeeper.getPosition(_key);
-
-        return _validateAddCollateral(
-            position.size, 
-            position.collateral, 
-            _amountIn,
-            _collateralToken,
-            _collateralPrice
-        );
-    }
-
     function validateAmountIn(
         address _collateralToken,
         uint256 _amountIn,
@@ -508,182 +485,163 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         uint256 _collateralPrice
     ) internal view returns (uint256){
         uint256 amountInUSD = priceManager.fromTokenToUSD(_collateralToken, _amountIn, _collateralPrice);
-        require(amountInUSD > 0, "AmountIn should not be ZERO");
+        require(amountInUSD > 0, "ZERO amountIn");
         return amountInUSD;
     }
 
-    function validateAddCollateral(
-        uint256 _positionSize, 
-        uint256 _positionCollateral, 
+    function validateAddOrRemoveCollateral(
+        bytes32 _key,
         uint256 _amountIn,
+        bool _isPlus,
         address _collateralToken,
+        uint256 _indexPrice,
         uint256 _collateralPrice
-    ) external view returns (uint256) {
-        return _validateAddCollateral(
-            _positionSize, 
-            _positionCollateral, 
+    ) external view returns (uint256, Position memory) {
+        return validateAddOrRemoveCollateral(
             _amountIn,
+            _isPlus,
             _collateralToken,
-            _collateralPrice
+            _indexPrice,
+            _collateralPrice,
+            positionKeeper.getPosition(_key)
         );
     }
 
-    function _validateAddCollateral(
-        uint256 _positionSize, 
-        uint256 _positionCollateral, 
+    function validateAddOrRemoveCollateral(
         uint256 _amountIn,
+        bool _isPlus,
         address _collateralToken,
-        uint256 _collateralPrice
-    ) internal view returns (uint256) {
-        uint256 amountInUSD = _validateAmountIn(_collateralToken, _amountIn, _collateralPrice);
-        _validateSizeCollateralAmount(_positionSize, _positionCollateral + amountInUSD);
-        return amountInUSD;
-    }
-
-    function validateRemoveCollateral(
-        uint256 _amountIn, 
-        bool _isLong,
-        address _indexToken,
         uint256 _indexPrice,
-        bytes32 _key
-    ) external view {
-        Position memory position = positionKeeper.getPosition(_key);
-        require(_amountIn <= position.collateral, "Insufficient position collateral");
-        position.collateral -= _amountIn;
-        _validateRemoveCollateral(
-            _amountIn, 
-            _isLong,
-            _indexToken,
-            _indexPrice,
-            position
-        );
-    }
-
-    function validateRemoveCollateral(
-        uint256 _amountIn, 
-        bool _isLong,
-        address _indexToken,
-        uint256 _indexPrice,
+        uint256 _collateralPrice,
         Position memory _position
-    ) external view {
-        _validateRemoveCollateral(
-            _amountIn, 
-            _isLong,
-            _indexToken,
-            _indexPrice,
-            _position
-        );
-    }
+    ) public view returns (uint256, Position memory) {
+        _isValidContract(address(settingsManager));
+        _isValidContract(address(positionKeeper));
+        _amountIn = _isPlus ? _validateAmountIn(_collateralToken, _amountIn, _collateralPrice) : _amountIn;
 
-    function _validateRemoveCollateral(
-        uint256 _amountIn, 
-        bool _isLong,
-        address _indexToken,
-        uint256 _indexPrice,
-        Position memory _position
-    ) internal view {
-        _validateSizeCollateralAmount(_position.size, _position.collateral);
-        require(_amountIn <= _position.reserveAmount, "Insufficient reserved collateral");
-        require(_position.totalFee <= _position.collateral, "Insufficient position collateral, fee exceeded");
-        _validateLiquidation(_position.owner, _indexToken, _isLong, true, _indexPrice, _position);
+        if (!_isPlus) {
+            require(_position.collateral >= _amountIn && _position.reserveAmount >= _amountIn, "Insufficient positionCollateral");
+        }
+
+        uint256 borrowFee = settingsManager.getBorrowFee(
+            _position.indexToken, 
+            _position.size - _position.collateral, 
+            _position.lastIncreasedTime
+        );
+        _validateSizeCollateralAmount(_position.size, _isPlus ? _position.collateral + _amountIn : _position.collateral - _amountIn);
+
+        if (_isPlus) {
+            _position.collateral += _amountIn;
+            _position.reserveAmount += _amountIn;
+        } else {
+            _position.collateral -= _amountIn;
+            _position.reserveAmount -= _amountIn;
+        }
+
+        //Set previous fee to ZERO to ignore previous fee on validateLiquidation
+        uint256 previousFee = _position.previousFee + borrowFee;
+        _position.previousFee = 0;
+
+        if (previousFee > 0) {
+            require(_position.collateral >= previousFee, "Fee exceeded positionCollateral");
+        }
+
+        validateLiquidation(true, !_isPlus, !_isPlus, _indexPrice, _position);
+        _position.lastIncreasedTime = block.timestamp;
+        _position.previousFee = previousFee;
+        return (_amountIn, _position);
     }
 
     function beforeDecreasePosition(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
+        address _collateralToken,
         uint256 _sizeDelta,
-        uint256 _indexPrice,
-        bool _isInternal
-    ) external view returns (uint256[4] memory, bool, bool, Position memory) {
-        if (_isInternal) {
-            require(msg.sender == positionHandler, "Forbidden: Not positionHandler");
-        }
+        uint256 _indexPrice
+    ) external view returns (bool, int256, uint256[4] memory, Position memory) {
+        _isValidContract(address(positionKeeper));
+        Position memory position = positionKeeper.getPosition(_key);
+        bool hasProfit;
+        bytes memory encodedData;
+        int256 fundingFee;
 
-        Position memory position;
-
-        //Scope to avoid stack too deep error
-        {
-            bytes32 key = _getPositionKey(_account, _indexToken, _isLong, _posId);
-            position = positionKeeper.getPosition(key);
-        }
-
-        return _beforeDecreasePosition(
-            _indexToken,
+        (hasProfit, fundingFee, encodedData) = beforeDecreasePosition(
+            _collateralToken,
             _sizeDelta,
-            _isLong,
             _indexPrice,
-            position,
-            _isInternal
+            position
         );
+
+        uint256[4] memory posData;
+        (posData, position) = abi.decode(encodedData, ((uint256[4]), (Position)));
+        return (hasProfit, fundingFee, posData, position);
     }
 
-    function _beforeDecreasePosition(
-        address _indexToken,
+    function beforeDecreasePosition(
+        address _collateralToken,
         uint256 _sizeDelta,
-        bool _isLong,
         uint256 _indexPrice,
-        Position memory _position,
-        bool _isInternal
-    ) internal view returns (uint256[4] memory, bool, bool, Position memory) {
-        require(_position.size > 0, "Insufficient position size, ZERO");
-
-        if (!_isInternal) {
-            require(positionKeeper.reservedAmounts(_indexToken, _isLong) >= _sizeDelta, "Vault: reservedAmounts exceeded");
-        }
-
+        Position memory _position
+    ) public view returns (bool, int256, bytes memory) {
+        _isValidPosition(_position);
+        require(vault.reservedAmounts(_collateralToken) >= _sizeDelta, "Vault: reservedAmounts exceeded");
         uint256 decreaseReserveAmount = (_position.reserveAmount * _sizeDelta) / _position.size;
-        require(decreaseReserveAmount <= _position.reserveAmount, "Insufficient position reserve amount");
+        require(decreaseReserveAmount <= _position.reserveAmount, "Insufficient positionReserve");
         _position.reserveAmount -= decreaseReserveAmount;
         uint256[4] memory posData;
         bool hasProfit;
+        int256 fundingFee;
 
         {
-            (posData, hasProfit) = _reduceCollateral(
-                _indexToken, 
+            //posData: [usdOut, tradingFee, collateralDelta, adjustedDelta]
+            (hasProfit, fundingFee, posData) = _reduceCollateral(
                 _sizeDelta, 
-                _isLong, 
                 _indexPrice, 
                 _position
             );
         }
 
         if (_position.size != _sizeDelta) {
-            _position.entryFundingRate = settingsManager.cumulativeFundingRates(_indexToken, _isLong);
-            require(_sizeDelta <= _position.size, "Insufficient position size, exceeded");
+            _position.entryFunding = settingsManager.fundingIndex(_position.indexToken);
+            require(_sizeDelta <= _position.size, "PositionSize exceeded");
             _position.size -= _sizeDelta;
             _validateSizeCollateralAmount(_position.size, _position.collateral);
-            _validateLiquidation(_position.owner, _indexToken, _isLong, true, _indexPrice, _position);
+            validateLiquidation(true, false, false, _indexPrice, _position);
         } else {
             _position.size = 0;
         }
 
-        return (posData, hasProfit, _position.size != _sizeDelta, _position);
+        return (hasProfit, fundingFee, abi.encode(posData, _position));
     }
 
     function _reduceCollateral(
-        address _indexToken,
         uint256 _sizeDelta,
-        bool _isLong,
         uint256 _indexPrice, 
         Position memory _position
-    ) internal view returns (uint256[4] memory, bool) {
+    ) internal view returns (bool, int256, uint256[4] memory) {
         bool hasProfit;
         uint256 adjustedDelta;
+        uint256 tradingFee;
+        int256 fundingFee;
 
         //Scope to avoid stack too deep error
         {
-            (bool _hasProfit, uint256 delta) = priceManager.getDelta(
-                _indexToken,
-                _position.size,
-                _position.averagePrice,
-                _isLong,
-                _indexPrice
+            uint256 delta;
+            (hasProfit, delta, tradingFee, fundingFee) = calculatePnl(
+                _sizeDelta,
+                _position.size - _position.collateral,
+                _indexPrice,
+                true,
+                true,
+                true,
+                _position
             );
-            hasProfit = _hasProfit;
-            //Calculate the proportional change in PNL = leverage * delta
             adjustedDelta = (_sizeDelta * delta) / _position.size;
+        }
+
+        uint256 collateralDelta;
+
+        {
+            collateralDelta = (_position.collateral * _sizeDelta) / _position.size;
         }
 
         uint256 usdOut;
@@ -693,13 +651,10 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
                 usdOut = adjustedDelta;
                 _position.realisedPnl += int256(adjustedDelta);
             } else {
-                require(_position.collateral >= adjustedDelta, "Insufficient position collateral");
-                _position.collateral -= adjustedDelta;
+                _position.collateral = _position.collateral < adjustedDelta ? 0 : _position.collateral - adjustedDelta;
                 _position.realisedPnl -= int256(adjustedDelta);
             }
         }
-
-        uint256 collateralDelta = (_position.collateral * _sizeDelta) / _position.size;
 
         // If the position will be closed, then transfer the remaining collateral out
         if (_position.size == _sizeDelta) {
@@ -710,47 +665,153 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             usdOut += collateralDelta;
             _position.collateral -= collateralDelta;
         }
-
-        uint256 fee;
-
-        //Scope to avoid stack too deep error
-        {
-            //Calculate fee for closing position
-            fee = _calculateMarginFee(_indexToken, _isLong, _sizeDelta, _position);
-            //Add previous openning fee
-            fee += _position.totalFee;
-            _position.totalFee = 0;
-        }
-
         
         // If the usdOut is more or equal than the fee then deduct the fee from the usdOut directly
         // else deduct the fee from the position's collateral
-        if (usdOut < fee) {
-            require(fee <= _position.collateral, "Insufficient position collateral to deduct fee");
-            _position.collateral -= fee;
+        if (usdOut < tradingFee) {
+            require(tradingFee <= _position.collateral, "Insufficient position collateral to deduct fee");
+            _position.collateral -= tradingFee;
         }
 
-        _validateDecreasePosition(_indexToken, _isLong, true, _indexPrice, _position);
-        return ([usdOut, fee, collateralDelta, adjustedDelta], hasProfit);
+        _validateDecreasePosition(true, _indexPrice, _position);
+        return (hasProfit, fundingFee, [usdOut, tradingFee, collateralDelta, adjustedDelta]);
     }
 
-    function _calculateMarginFee(
-        address _indexToken, 
-        bool _isLong, 
-        uint256 _sizeDelta, 
-        Position memory _position
-    ) internal view returns (uint256){
-        return settingsManager.collectMarginFees(
-            _position.owner,
-            _indexToken,
-            _isLong,
+    function calculatePnl(
+        bytes32 _key,
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        bool _isLiquidated
+    ) external view returns (bool, uint256, uint256, int256) {
+        Position memory position;
+
+        //Scope to avoid stack too deep error
+        {
+            position = positionKeeper.getPosition(_key);
+        }
+
+        return calculatePnl(
             _sizeDelta,
-            _position.size,
-            _position.entryFundingRate
+            _loanDelta,
+            _indexPrice,
+            _isApplyBorrowFee,
+            _isApplyFundingFee,
+            _isLiquidated,
+            position
+        );
+    }
+
+    function calculatePnl(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        bool _isLiquidated,
+        Position memory _position
+    ) public view returns (bool, uint256, uint256, int256) {
+        _isValidPosition(_position);
+        int256 pnl;
+
+        //Scope to avoid stack too deep error
+        {
+            int256 multiplier = _position.isLong ? (_indexPrice >= _position.averagePrice ? int256(1) : int256(-1)) 
+                : (_indexPrice >= _position.averagePrice ? int256(-1) : int256(1));
+
+            pnl = multiplier * int256((_position.size * 
+                (
+                    //priceDiff
+                    _indexPrice >= _position.averagePrice 
+                        ? _indexPrice - _position.averagePrice 
+                        : _position.averagePrice - _indexPrice
+                ) 
+            ) / _position.averagePrice);
+        }
+
+        //TradingFee include marginFee + borrowFee + previousFee 
+        uint256 tradingFee;
+        int fundingFee;
+        
+        {
+            (tradingFee, fundingFee) = _calculateFees(
+                _sizeDelta, 
+                _loanDelta, 
+                _isApplyBorrowFee, 
+                _isApplyFundingFee, 
+                _position
+            );
+
+            if (_position.previousFee > 0) {
+                //Reduce previousFee to zero, already added previousFee in settingsManager.getFees()
+                _position.previousFee = 0;
+            }
+        }
+
+        if (_isLiquidated && fundingFee < 0) {
+            fundingFee = 0;
+        }
+
+        pnl = pnl - fundingFee - int256(tradingFee); 
+        return pnl > 0 ? (true, uint256(pnl), tradingFee, fundingFee) 
+            : (false, uint256(-1 * pnl), tradingFee, fundingFee);
+    }
+
+    function _calculateFees(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        Position memory _position
+    ) internal view returns (uint256, int256){
+        _isValidContract(address(settingsManager));
+        return settingsManager.getFees(
+            _sizeDelta,
+            _loanDelta,
+            _isApplyBorrowFee, 
+            _isApplyFundingFee,
+            _position
         );
     }
 
     function _getFirstParams(uint256[] memory _params) internal pure returns (uint256) {
         return _params[0];
+    }
+
+    function reCalculatePosition(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice, 
+        Position memory _position
+    ) external view returns (uint256, int256) {
+        _isValidContract(address(priceManager));
+        uint256 averagePrice = _sizeDelta == 0 ? _position.averagePrice 
+            : priceManager.getNextAveragePrice(
+                _position.indexToken,
+                _position.size,
+                _position.averagePrice,
+                _position.isLong,
+                _sizeDelta,
+                _indexPrice
+        );
+        uint256 prevLoanSize = _position.size - _position.collateral;
+        int256 entryFunding =
+            (int256(prevLoanSize) *
+                _position.entryFunding +
+                int256(_loanDelta) *
+                settingsManager.fundingIndex(_position.indexToken)) /
+            int256(prevLoanSize + _loanDelta);
+
+        return (averagePrice, entryFunding);
+    }
+
+    function _isValidContract(address _contract) internal view {
+        require(Address.isContract(_contract), "Not initialized");
+    }
+
+    function _isValidPosition(Position memory _position) internal pure {
+        require(_position.owner != address(0), "Position notExist");
     }
 }

@@ -11,13 +11,13 @@ interface ISwapRouter {
         uint256 _amountIn, 
         address _tokenOut, 
         uint256 _amountOutMin
-    ) external returns (uint256);
+    ) external returns (bool, address, uint256);
 
-    function swap(
-        address _tokenIn, 
-        uint256 _amountIn, 
-        address _tokenOut, 
-        address _receiver, 
-        uint256 _amountOutMin 
-    ) external returns (uint256);
+    // function swap(
+    //     address _tokenIn, 
+    //     uint256 _amountIn, 
+    //     address _tokenOut, 
+    //     address _receiver, 
+    //     uint256 _amountOutMin 
+    // ) external returns (uint256);
 }

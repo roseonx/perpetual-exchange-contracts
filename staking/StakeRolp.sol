@@ -80,6 +80,7 @@ contract StakingROLP is Ownable {
         uint256 _startTime,
         uint256 _rewardEndTime
     ) public onlyOwner {
+        require(poolInfo.startTime == 0 && poolInfo.totalStake == 0, "Pool created");
         poolInfo = 
             PoolInfo({
                 startTime: _startTime,

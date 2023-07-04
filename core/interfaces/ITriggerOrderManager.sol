@@ -15,17 +15,14 @@ interface ITriggerOrderManager {
         address _account,
         address _token,
         bool _isLong,
-        uint256 _posId
-    ) external view returns (bool);
-
-    function validateTPSLTriggers(
-        address _account,
-        address _token,
-        bool _isLong,
         uint256 _posId,
         uint256 _indexPrice
-    ) external view returns (bool);
+    ) external returns (bool);
 
+    function validateTPSLTriggers(
+        bytes32 _key,
+        uint256 _indexPrice
+    ) external view returns (bool);
 
     function triggerPosition(
         address _account,

@@ -2,12 +2,12 @@
 
 pragma solidity ^0.8.12;
 
+import {Position} from "../../constants/Structs.sol";
+
 interface ISettingsManager {
     function decreaseOpenInterest(address _token, address _sender, bool _isLong, uint256 _amount) external;
 
     function increaseOpenInterest(address _token, address _sender, bool _isLong, uint256 _amount) external;
-
-    function updateCumulativeFundingRate(address _token, bool _isLong) external;
 
     function openInterestPerAsset(address _token) external view returns (uint256);
 
@@ -20,15 +20,6 @@ interface ISettingsManager {
     function checkDelegation(address _master, address _delegate) external view returns (bool);
 
     function closeDeltaTime() external view returns (uint256);
-
-    function collectMarginFees(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _sizeDelta,
-        uint256 _size,
-        uint256 _entryFundingRate
-    ) external view returns (uint256);
 
     function cooldownDuration() external view returns (uint256);
 
@@ -46,15 +37,6 @@ interface ISettingsManager {
 
     function fundingInterval() external view returns (uint256);
 
-    function fundingRateFactor(address _token, bool _isLong) external view returns (uint256);
-
-    function getFundingFee(
-        address _indexToken,
-        bool _isLong,
-        uint256 _size,
-        uint256 _entryFundingRate
-    ) external view returns (uint256);
-
     function getPositionFee(address _indexToken, bool _isLong, uint256 _sizeDelta) external view returns (uint256);
 
     function getDelegates(address _master) external view returns (address[] memory);
@@ -65,11 +47,9 @@ interface ISettingsManager {
 
     function isStable(address _token) external view returns (bool);
 
-    function isManager(address _account) external view returns (bool);
-
     function isStaking(address _token) external view returns (bool);
 
-    function lastFundingTimes(address _token, bool _isLong) external view returns (uint256);
+    function lastFundingTimes(address _token) external view returns (uint256);
 
     function maxPriceUpdatedDelay() external view returns (uint256);
 
@@ -84,8 +64,6 @@ interface ISettingsManager {
     function pauseForexForCloseTime() external view returns (bool);
 
     function priceMovementPercent() external view returns (uint256);
-
-    function referFee() external view returns (uint256);
 
     function referEnabled() external view returns (bool);
 
@@ -117,7 +95,60 @@ interface ISettingsManager {
 
     function isApprovalCollateralToken(address _token) external view returns (bool);
 
+    function isApprovalCollateralToken(address _token, bool _raise) external view returns (bool);
+
     function isEmergencyStop() external view returns (bool);
 
     function validateCollateralPathAndCheckSwap(address[] memory _collateralPath) external view returns (bool);
+
+    function maxProfitPercent() external view returns (uint256);
+
+    function basisFundingRateFactor() external view returns (uint256);
+
+    function maxFundingRate() external view returns (uint256);
+
+    function fundingRateFactor(address _token) external view returns (uint256);
+
+    function fundingIndex(address _token) external view returns (int256);
+
+    function getFundingRate(address _indexToken, address _collateralToken) external view returns (int256);
+
+    function defaultBorrowFeeFactor() external view returns (uint256);
+
+    function borrowFeeFactor(address token) external view returns (uint256);
+
+    function getFundingFee(
+        address _indexToken,
+        bool _isLong,
+        uint256 _size,
+        int256 _fundingIndex
+    ) external view returns (int256);
+
+    function getBorrowFee(
+        address _indexToken,
+        uint256 _borrowedSize,
+        uint256 _lastIncreasedTime
+    ) external view returns (uint256);
+
+    function getFees(
+        bytes32 _key,
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        bool _isApplyTradingFee,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee
+    ) external view returns (uint256, int256);
+
+    function getFees(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        bool _isApplyTradingFee,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        Position memory _position
+    ) external view returns (uint256, int256);
+
+    function getDiscountFee(address _account, uint256 _fee) external view returns (uint256);
+
+    function updateFunding(address _indexToken, address _collateralToken) external;
 }

@@ -15,7 +15,7 @@ import "./interfaces/ISettingsManager.sol";
 import "./interfaces/IVault.sol";
 import "./interfaces/IVaultUtils.sol";
 import "./interfaces/ITriggerOrderManager.sol";
-import "./interfaces/IRouter.sol";
+import "./interfaces/IPositionRouter.sol";
 
 import {PositionConstants} from "../constants/PositionConstants.sol";
 import {Position, OrderInfo, OrderStatus, OrderType, DataType} from "../constants/Structs.sol";
@@ -30,7 +30,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     IVault public vault;
     IVaultUtils public vaultUtils;
     bool public isInitialized;
-    address public router;
+    IPositionRouter public positionRouter;
 
     event Initialized(
         IPriceManager priceManager,
@@ -39,12 +39,12 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         IVault vault,
         IVaultUtils vaultUtils
     );
-    event SetRouter(address router);
+    event SetPositionRouter(address positionRouter);
     event SetPositionKeeper(address positionKeeper);
     event SyncPriceOutdated(bytes32 key, uint256 txType, address[] path);
 
     modifier onlyRouter() {
-        require(msg.sender == router, "FBD");
+        require(msg.sender == address(positionRouter), "FBD");
         _;
     }
 
@@ -56,10 +56,10 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
 
     //Config functions
-    function setRouter(address _router) external onlyOwner {
-        require(Address.isContract(_router), "IVLCA"); //Invalid contract address
-        router = _router;
-        emit SetRouter(_router);
+    function setPositionRouter(address _positionRouter) external onlyOwner {
+        require(Address.isContract(_positionRouter), "IVLCA"); //Invalid contract address
+        positionRouter = IPositionRouter(_positionRouter);
+        emit SetPositionRouter(_positionRouter);
     }
 
     function setPositionKeeper(address _positionKeeper) external onlyOwner {
@@ -97,108 +97,34 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
     //End config functions
 
-    function openNewPosition(
-        bytes32 _key,
-        bool _isLong, 
-        uint256 _posId,
-        uint256 _collateralIndex,
-        bytes memory _data,
-        uint256[] memory _params,
-        uint256[] memory _prices, 
-        address[] memory _path,
-        bool _isFastExecute,
-        bool _isNewPosition
-    ) external override onlyRouter inProcess(_key) {
-        require(_collateralIndex > 0 && _collateralIndex < _path.length, "IVLCTI"); //Invalid collateral index
-        (Position memory position, OrderInfo memory order) = abi.decode(_data, ((Position), (OrderInfo)));
-        vaultUtils.validatePositionData(
-            _isLong, 
-            _getFirstPath(_path), 
-            _getOrderType(order.positionType), 
-            _getFirstParams(_prices), 
-            _params, 
-            true
-        );
-        
-        if (order.positionType == POSITION_MARKET && _isFastExecute) {
-            _increaseMarketPosition(
-                _key,
-                _isLong,
-                _collateralIndex,
-                _path,
-                _prices, 
-                position,
-                order
-            );
-            vault.decreaseBond(_key, position.owner, CREATE_POSITION_MARKET);
-        }
-
-        if (_isNewPosition) {
-            positionKeeper.openNewPosition(
-                _key,
-                _isLong,
-                _posId,
-                _collateralIndex,
-                _path,
-                _params, 
-                abi.encode(position, order)
-            );
-        } else {
-            positionKeeper.unpackAndStorage(_key, abi.encode(position), DataType.POSITION);
-        }
-    }
-
-    function _increaseMarketPosition(
-        bytes32 _key,
-        bool _isLong,
-        uint256 _collateralIndex,
-        address[] memory _path,
-        uint256[] memory _prices, 
-        Position memory _position,
-        OrderInfo memory _order
-    ) internal {
-        require(_order.pendingCollateral > 0 && _order.pendingSize > 0, "IVLOPC/S"); //Invalid order pending collateral/size
-        uint256 collateralDecimals = priceManager.getTokenDecimals(_path[_collateralIndex]);
-        uint256 collateralPrice = _getLastParams(_prices);
-        uint256 pendingCollateral = _fromTokenToUSD(_order.pendingCollateral, collateralPrice, collateralDecimals);
-        uint256 pendingSize = _fromTokenToUSD(_order.pendingSize, collateralPrice, collateralDecimals);
-        _increasePosition(
-            _key,
-            pendingCollateral,
-            pendingSize,
-            _isLong,
-            _path,
-            _prices,
-            _position
-        );
-        _order.pendingCollateral = 0;
-        _order.pendingSize = 0;
-        _order.collateralToken = address(0);
-    }
-
     function modifyPosition(
-        address _account,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
         uint256 _txType, 
-        bytes memory _data,
         address[] memory _path,
-        uint256[] memory _prices
-    ) external onlyRouter inProcess(_getPositionKey(_account, _getFirstPath(_path), _isLong, _posId)) {
+        uint256[] memory _prices,
+        bytes memory _data
+    ) external onlyRouter inProcess(_key) {
         if (_txType != CANCEL_PENDING_ORDER) {
             require(_path.length == _prices.length && _path.length > 0, "IVLARL"); //Invalid array length
         }
+
+        address account;
         
-        bytes32 key = _getPositionKey(_account, _getFirstPath(_path), _isLong, _posId);
-        require(_account == positionKeeper.getPositionOwner(key), "IVLPO"); //Invalid positionOwner
         bool isDelayPosition = false;
         uint256 delayPositionTxType;
 
-        if (_txType == ADD_COLLATERAL || _txType == REMOVE_COLLATERAL) {
+        if (_isOpenPosition(_txType)) {
+            account = _openNewPosition(
+                _key,
+                _path,
+                _prices,
+                _data
+            );
+        } else if (_txType == ADD_COLLATERAL || _txType == REMOVE_COLLATERAL) {
             (uint256 amountIn, Position memory position) = abi.decode(_data, ((uint256), (Position)));
+            account = position.owner;
             _addOrRemoveCollateral(
-                key, 
-                _isLong,
+                _key, 
                 _txType, 
                 amountIn, 
                 _path, 
@@ -206,71 +132,91 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
                 position
             );
         } else if (_txType == ADD_TRAILING_STOP) {
-            (uint256[] memory params, OrderInfo memory order) = abi.decode(_data, ((uint256[]), (OrderInfo)));
-            _addTrailingStop(key, _isLong, params, order, _getFirstParams(_prices));
+            bool isLong;
+            uint256[] memory params;
+            OrderInfo memory order;
+
+            {
+                (account, isLong, params, order) = abi.decode(_data, ((address), (bool), (uint256[]), (OrderInfo)));
+                _addTrailingStop(_key, isLong, params, order, _getFirstParams(_prices));
+            }
         } else if (_txType == UPDATE_TRAILING_STOP) {
-            (OrderInfo memory order) = abi.decode(_data, ((OrderInfo)));
-            _updateTrailingStop(key, _isLong, _getFirstParams(_prices), order);
+            bool isLong;
+            OrderInfo memory order;
+
+            {
+                (account, isLong, order) = abi.decode(_data, ((address), (bool), (OrderInfo)));
+                _updateTrailingStop(_key, isLong, _getFirstParams(_prices), order);
+            }
         } else if (_txType == CANCEL_PENDING_ORDER) {
-            OrderInfo memory order = abi.decode(_data, ((OrderInfo)));
-            _cancelPendingOrder(_account, key, order);
+            OrderInfo memory order;
+            
+            {
+                (account, order) = abi.decode(_data, ((address), (OrderInfo)));
+                _cancelPendingOrder(_key, order);
+            } 
         } else if (_txType == CLOSE_POSITION) {
             (uint256 sizeDelta, Position memory position) = abi.decode(_data, ((uint256), (Position)));
             require(sizeDelta > 0 && sizeDelta <= position.size, "IVLPSD"); //Invalid position size delta
+            account = position.owner;
             _decreasePosition(
-                _getFirstPath(_path),
+                _key,
                 sizeDelta,
-                _isLong,
-                _posId,
-                _prices,
+                _getLastPath(_path),
+                _getFirstParams(_prices),
+                _getLastParams(_prices),
                 position
             );
         } else if (_txType == TRIGGER_POSITION) {
             (Position memory position, OrderInfo memory order) = abi.decode(_data, ((Position), (OrderInfo)));
             isDelayPosition = position.size == 0;
             delayPositionTxType = isDelayPosition ? _getTxTypeFromPositionType(order.positionType) : 0;
+            account = position.owner;
             _triggerPosition(
-                key,
-                _isLong,
-                _posId,
-                _path,
-                _prices,
+                _key,
+                _getLastPath(_path),
+                _getFirstParams(_prices),
+                _getLastParams(_prices),
                 position,
                 order
             );
+            account = position.owner;
         } else if (_txType == ADD_POSITION) {
             (
                 uint256 pendingCollateral, 
                 uint256 pendingSize, 
                 Position memory position
             ) = abi.decode(_data, ((uint256), (uint256), (Position)));
+            account = position.owner;
             _confirmDelayTransaction(
-                _isLong,
-                _posId,
+                _key,
+                _getLastPath(_path),
                 pendingCollateral,
                 pendingSize,
-                _path,
-                _prices,
+                _getFirstParams(_prices),
+                _getLastParams(_prices),
                 position
             );
         } else if (_txType == LIQUIDATE_POSITION) {
             (Position memory position) = abi.decode(_data, (Position));
+            account = position.owner;
             _liquidatePosition(
-                _isLong,
-                _posId,
-                _prices,
-                _path,
+                _key,
+                _getLastPath(_path),
+                _getFirstParams(_prices),
+                _getLastParams(_prices),
                 position
             );
         } else if (_txType == REVERT_EXECUTE) {
             (uint256 originalTxType, Position memory position) = abi.decode(_data, ((uint256), (Position)));
+            account = position.owner;
 
             if (originalTxType == CREATE_POSITION_MARKET && position.size == 0) {
-                positionKeeper.deletePosition(key);
+                positionKeeper.deletePosition(_key);
             } else if (originalTxType == ADD_TRAILING_STOP || 
                     originalTxType == ADD_COLLATERAL || 
                     _isDelayPosition(originalTxType)) {
-                positionKeeper.deleteOrder(key);
+                positionKeeper.deleteOrder(_key);
             }
         } else {
             revert("IVLTXT"); //Invalid txType
@@ -283,10 +229,87 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
                 _txType == ADD_COLLATERAL ||
                 _txType == ADD_POSITION ||
                 isTriggerDelayPosition) {
-
             uint256 exactTxType = isTriggerDelayPosition && delayPositionTxType > 0 ? delayPositionTxType : _txType;
-            vault.decreaseBond(key, _account, exactTxType);
+            vault.decreaseBond(_key, account, exactTxType);
         }
+    }
+
+    function _openNewPosition(
+        bytes32 _key,
+        address[] memory _path,
+        uint256[] memory _prices, 
+        bytes memory _data
+    ) internal returns (address) {
+        bool isFastExecute;
+        bool isNewPosition;
+        uint256[] memory params;
+        Position memory position;
+        OrderInfo memory order;
+        (isFastExecute, isNewPosition, params, position, order) = abi.decode(_data, ((bool), (bool), (uint256[]), (Position), (OrderInfo)));
+        vaultUtils.validatePositionData(
+            position.isLong, 
+            _getFirstPath(_path), 
+            _getOrderType(order.positionType), 
+            _getFirstParams(_prices), 
+            params, 
+            true
+        );
+        
+        if (order.positionType == POSITION_MARKET && isFastExecute) {
+            _increaseMarketPosition(
+                _key,
+                _path,
+                _prices, 
+                position,
+                order
+            );
+            vault.decreaseBond(_key, position.owner, CREATE_POSITION_MARKET);
+        }
+
+        if (isNewPosition) {
+            positionKeeper.openNewPosition(
+                _key,
+                position.isLong,
+                position.posId,
+                _path,
+                params, 
+                abi.encode(position, order)
+            );
+        } else {
+            positionKeeper.unpackAndStorage(_key, abi.encode(position), DataType.POSITION);
+        }
+
+        return position.owner;
+    }
+
+    function _increaseMarketPosition(
+        bytes32 _key,
+        address[] memory _path,
+        uint256[] memory _prices, 
+        Position memory _position,
+        OrderInfo memory _order
+    ) internal {
+        require(_order.pendingCollateral > 0 && _order.pendingSize > 0, "IVLPC"); //Invalid pendingCollateral
+        uint256 collateralDecimals = priceManager.getTokenDecimals(_getLastPath(_path));
+        require(collateralDecimals > 0, "IVLD"); //Invalid decimals
+        uint256 pendingCollateral = _order.pendingCollateral;
+        uint256 pendingSize = _order.pendingSize;
+        _order.pendingCollateral = 0;
+        _order.pendingSize = 0;
+        _order.collateralToken = address(0);
+        _order.status = OrderStatus.FILLED;
+        uint256 collateralPrice = _getLastParams(_prices);
+        pendingCollateral = _fromTokenToUSD(pendingCollateral, collateralPrice, collateralDecimals);
+        pendingSize = _fromTokenToUSD(pendingSize, collateralPrice, collateralDecimals);
+        require(pendingCollateral > 0 && pendingSize > 0, "IVLPC"); //Invalid pendingCollateral
+        _increasePosition(
+            _key,
+            pendingCollateral,
+            pendingSize,
+            _getLastPath(_path),
+            _getFirstParams(_prices),
+            _position
+        );
     }
 
     /*
@@ -298,20 +321,20 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         bytes32[] memory _keys, 
         uint256[] memory _txTypes
     ) external {
-        require(_keys.length == _txTypes.length && _keys.length > 0, "IVLARL2"); //Invalid array length
+        require(_keys.length == _txTypes.length && _keys.length > 0, "IVLARL"); //Invalid array length
         priceManager.setLatestPrices(_tokens, _prices);
-        require(_isExecutor(msg.sender), "FBD/NE"); //Forbidden, not executor 
+        _validateExecutor(msg.sender);
 
         for (uint256 i = 0; i < _keys.length; i++) {
-            address[] memory path = IRouter(router).getExecutePath(_keys[i], _txTypes[i]);
+            address[] memory path = IPositionRouter(positionRouter).getExecutePath(_keys[i], _txTypes[i]);
 
             if (path.length > 0) {
                 (uint256[] memory prices, bool isLastestSync) = priceManager.getLatestSynchronizedPrices(path);
 
                 if (isLastestSync && !processing[_keys[i]]) {
-                    try IRouter(router).setPriceAndExecute(_keys[i], _txTypes[i], prices) {}
+                    try IPositionRouter(positionRouter).execute(_keys[i], _txTypes[i], prices) {}
                     catch (bytes memory err) {
-                        IRouter(router).revertExecution(_keys[i], _txTypes[i], path, prices, string(err));
+                        IPositionRouter(positionRouter).revertExecution(_keys[i], _txTypes[i], path, prices, string(err));
                     }
                 } else {
                     emit SyncPriceOutdated(_keys[i], _txTypes[i], path);
@@ -320,9 +343,41 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         }
     }
 
+    function forceClosePosition(bytes32 _key, uint256[] memory _prices) external {
+        _validateExecutor(msg.sender);
+        _validatePositionKeeper();
+        _validateVaultUtils();
+        _validateRouter();
+        Position memory position = positionKeeper.getPosition(_key);
+        require(position.owner != address(0), "IVLPO"); //Invalid positionOwner
+        address[] memory path = positionKeeper.getPositionFinalPath(_key);
+        require(path.length > 0 && path.length == _prices.length, "IVLAL"); //Invalid array length
+        (bool hasProfit, uint256 pnl, , ) = vaultUtils.calculatePnl(
+            _key,
+            position.size,
+            position.size - position.collateral,
+            _getFirstParams(_prices),
+            true,
+            true,
+            false
+        );
+        require(
+            hasProfit && pnl >= (vault.getTotalUSD() * settingsManager.maxProfitPercent()) / BASIS_POINTS_DIVISOR,
+            "Not allowed"
+        );
+
+        _decreasePosition(
+            _key,
+            position.size,
+            _getLastPath(path),
+            _getFirstParams(_prices),
+            _getLastParams(_prices),
+            position
+        );
+    }
+
     function _addOrRemoveCollateral(
         bytes32 _key,
-        bool _isLong,
         uint256 _txType,
         uint256 _amountIn,
         address[] memory _path,
@@ -331,43 +386,29 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     ) internal {
         uint256 amountInUSD;
 
+        (amountInUSD, _position) = vaultUtils.validateAddOrRemoveCollateral(
+            _amountIn,
+            _txType == ADD_COLLATERAL ? true : false,
+            _getLastPath(_path), //collateralToken
+            _getFirstParams(_prices), //indexPrice
+            _getLastParams(_prices), //collateralPrice
+            _position
+        );
+
+        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
+
         if (_txType == ADD_COLLATERAL) {
-            amountInUSD = vaultUtils.validateAddCollateral(
-                _position.size, 
-                _position.collateral, 
+            vault.increasePoolAmount(_getLastPath(_path), amountInUSD);
+        } else {
+            vault.takeAssetOut(
+                _position.owner, 
+                0, //Zero fee for removeCollateral
                 _amountIn, 
                 _getLastPath(_path), 
                 _getLastParams(_prices)
             );
-            _position.collateral += amountInUSD;
-            _position.reserveAmount += amountInUSD;
-            positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
-            positionKeeper.increasePoolAmount(_getFirstPath(_path), _isLong, amountInUSD);
-        } else {
-            require(_amountIn <= _position.collateral, "ISFPC"); //Insufficient position collateral
-            amountInUSD = _amountIn;
-            _position.collateral -= _amountIn;
-            vaultUtils.validateRemoveCollateral(
-                amountInUSD, 
-                _isLong, 
-                _getFirstPath(_path), 
-                _getFirstParams(_prices), 
-                _position
-            );
-            _position.reserveAmount -= _amountIn;
-            _position.lastIncreasedTime = block.timestamp;
 
-            vault.takeAssetOut(
-                _position.owner, 
-                _position.refer, 
-                0,
-                _amountIn, 
-                positionKeeper.getPositionCollateralToken(_key), 
-                _getLastParams(_prices)
-            );
-
-            positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
-            positionKeeper.decreasePoolAmount(_getFirstPath(_path), _isLong, _amountIn);
+            vault.decreasePoolAmount(_getLastPath(_path), _amountIn);
         }
 
         positionKeeper.emitAddOrRemoveCollateralEvent(
@@ -402,7 +443,6 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
 
     function _cancelPendingOrder(
-        address _account,
         bytes32 _key,
         OrderInfo memory _order
     ) internal {
@@ -434,7 +474,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
         if (!isTrailingStop) {
             vault.takeAssetBack(
-                _account, 
+                positionKeeper.getPositionOwner(_key), 
                 _key, 
                 _getTxTypeFromPositionType(_order.positionType)
             );
@@ -443,32 +483,31 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
     function _triggerPosition(
         bytes32 _key,
-        bool _isLong,
-        uint256 _posId,
-        address[] memory _path, 
-        uint256[] memory _prices, 
+        address _collateralToken, 
+        uint256 _indexPrice,
+        uint256 _collateralPrice,
         Position memory _position, 
         OrderInfo memory _order
     ) internal {
-        settingsManager.updateCumulativeFundingRate(_getFirstPath(_path), _isLong);
-        uint8 statusFlag = vaultUtils.validateTrigger(_isLong, _getFirstParams(_prices), _order);
+        settingsManager.updateFunding(_position.indexToken, _collateralToken);
+        uint8 statusFlag = vaultUtils.validateTrigger(_position.isLong, _indexPrice, _order);
         (bool hitTrigger, uint256 triggerAmountPercent) = triggerOrderManager.executeTriggerOrders(
             _position.owner,
-            _getFirstPath(_path),
-            _isLong,
-            _posId,
-            _getFirstParams(_prices)
+            _position.indexToken,
+            _position.isLong,
+            _position.posId,
+            _indexPrice
         );
         require(statusFlag == ORDER_FILLED || hitTrigger, "TGNRD");  //Trigger not ready
 
         //When TriggerOrder from TriggerOrderManager reached price condition
         if (hitTrigger) {
             _decreasePosition(
-                _getFirstPath(_path),
+                _key,
                 (_position.size * (triggerAmountPercent)) / BASIS_POINTS_DIVISOR,
-                _isLong,
-                _posId,
-                _prices,
+                _collateralToken,
+                _indexPrice,
+                _collateralPrice,
                 _position
             );
         }
@@ -477,14 +516,12 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         if (statusFlag == ORDER_FILLED) {
             if (_order.positionType == POSITION_LIMIT || _order.positionType == POSITION_STOP_MARKET) {
                 uint256 collateralDecimals = priceManager.getTokenDecimals(_order.collateralToken);
-                uint256 collateralPrice = _getLastParams(_prices);
                 _increasePosition(
                     _key,
-                    _fromTokenToUSD(_order.pendingCollateral, collateralPrice, collateralDecimals),
-                    _fromTokenToUSD(_order.pendingSize, collateralPrice, collateralDecimals),
-                    _isLong,
-                    _path,
-                    _prices, 
+                    _fromTokenToUSD(_order.pendingCollateral, _collateralPrice, collateralDecimals),
+                    _fromTokenToUSD(_order.pendingSize, _collateralPrice, collateralDecimals),
+                    _collateralToken,
+                    _indexPrice,
                     _position
                 );
                 _order.pendingCollateral = 0;
@@ -496,7 +533,14 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             } else if (_order.positionType == POSITION_TRAILING_STOP) {
                 //Double check position size and collateral if hitTriggered
                 if (_position.size > 0 && _position.collateral > 0) {
-                    _decreasePosition(_getFirstPath(_path), _order.pendingSize, _isLong, _posId, _prices, _position);
+                    _decreasePosition(
+                        _key,
+                        _order.pendingSize, 
+                        _collateralToken,
+                        _indexPrice,
+                        _collateralPrice, 
+                        _position
+                    );
                     _order.positionType = POSITION_MARKET;
                     _order.pendingCollateral = 0;
                     _order.pendingSize = 0;
@@ -511,102 +555,91 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
 
     function _confirmDelayTransaction(
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
+        address _collateralToken,
         uint256 _pendingCollateral,
         uint256 _pendingSize,
-        address[] memory _path,
-        uint256[] memory _prices,
+        uint256 _indexPrice,
+        uint256 _collateralPrice,
         Position memory _position
     ) internal {
-        bytes32 key = _getPositionKey(_position.owner, _getFirstPath(_path), _isLong, _posId);
-        vaultUtils.validateConfirmDelay(_position.owner, _getFirstPath(_path), _isLong, _posId, true);
-        require(vault.getBondAmount(key, ADD_POSITION) >= 0, "ISFBA"); //Insufficient bond amount
-
-        uint256 fee = settingsManager.collectMarginFees(
-            _position.owner,
-            _getFirstPath(_path),
-            _isLong,
-            _pendingSize,
-            _position.size,
-            _position.entryFundingRate
-        );
-
+        vaultUtils.validateConfirmDelay(_key, true);
+        require(vault.getBondAmount(_key, ADD_POSITION) >= 0, "ISFBA"); //Insufficient bond amount
         uint256 pendingCollateralInUSD;
         uint256 pendingSizeInUSD;
       
         //Scope to avoid stack too deep error
         {
-            uint256 collateralDecimals = priceManager.getTokenDecimals(_getLastPath(_path));
-            uint256 collateralPrice = _getLastParams(_prices);
-            pendingCollateralInUSD = _fromTokenToUSD(_pendingCollateral, collateralPrice, collateralDecimals);
-            pendingSizeInUSD = _fromTokenToUSD(_pendingSize, collateralPrice, collateralDecimals);
+            uint256 collateralDecimals = priceManager.getTokenDecimals(_collateralToken);
+            pendingCollateralInUSD = _fromTokenToUSD(_pendingCollateral, _collateralPrice, collateralDecimals);
+            pendingSizeInUSD = _fromTokenToUSD(_pendingSize, _collateralPrice, collateralDecimals);
+            require(pendingCollateralInUSD > 0 && pendingSizeInUSD > 0, "IVLPC"); //Invalid pending collateral
         }
 
         _increasePosition(
-            key,
-            pendingCollateralInUSD + fee,
+            _key,
+            pendingCollateralInUSD,
             pendingSizeInUSD,
-            _isLong,
-            _path,
-            _prices,
+            _collateralToken,
+            _indexPrice,
             _position
         );
         positionKeeper.emitConfirmDelayTransactionEvent(
-            key,
+            _key,
             true,
             _pendingCollateral,
             _pendingSize,
-            fee
+            _position.previousFee
         );
     }
 
     function _liquidatePosition(
-        bool _isLong,
-        uint256 _posId,
-        uint256[] memory _prices,
-        address[] memory _path,
+        bytes32 _key,
+        address _collateralToken,
+        uint256 _indexPrice,
+        uint256 _collateralPrice,
         Position memory _position
     ) internal {
-        settingsManager.updateCumulativeFundingRate(_getFirstPath(_path), _isLong);
-        bytes32 key = _getPositionKey(_position.owner, _getFirstPath(_path), _isLong, _posId);
-        (uint256 liquidationState, uint256 marginFees) = vaultUtils.validateLiquidation(
-            _position.owner,
-            _getFirstPath(_path),
-            _isLong,
-            false,
-            _getFirstParams(_prices),
+        settingsManager.updateFunding(_position.indexToken, _collateralToken);
+        (uint256 liquidationState, uint256 fee) = vaultUtils.validateLiquidation(
+            true,
+            true,
+            true,
+            _indexPrice,
             _position
         );
-        require(liquidationState != LIQUIDATE_NONE_EXCEED, "NLS");
+        require(liquidationState != LIQUIDATE_NONE_EXCEED, "NLS"); //Not liquidated state
+        positionKeeper.updateGlobalShortData(_key, _position.size, _indexPrice, false);
+
+        if (_position.isLong) {
+            vault.decreaseGuaranteedAmount(_collateralToken, _position.size - _position.collateral);
+        }
 
         if (liquidationState == LIQUIDATE_THRESHOLD_EXCEED) {
             // Max leverage exceeded but there is collateral remaining after deducting losses so decreasePosition instead
-            _decreasePosition(_getFirstPath(_path), _position.size, _isLong, _posId, _prices, _position);
-            positionKeeper.unpackAndStorage(key, abi.encode(_position), DataType.POSITION);
+            _decreasePosition(
+                _key,
+                _position.size, 
+                _collateralToken, 
+                _indexPrice, 
+                _collateralPrice, 
+                _position
+            );
+            positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
             return;
         }
-        marginFees += _position.totalFee;
-        _accountDeltaAndFeeIntoTotalBalance(
-            key,
-            true,
-            0,
-            marginFees,
-            address(0),
-            _getLastParams(_prices)
-        );
-        uint256 bounty = marginFees;
-        vault.transferBounty(settingsManager.feeManager(), bounty);
-        settingsManager.decreaseOpenInterest(_getFirstPath(_path), _position.owner, _isLong, _position.size);
-        positionKeeper.decreasePoolAmount(_getFirstPath(_path), _isLong, marginFees);
-        positionKeeper.emitLiquidatePositionEvent(
-            key, 
-            _getFirstPath(_path), 
-            _isLong, 
-            _getFirstParams(_prices)
-        );
-        // Pay the fee receive using the pool, we assume that in general the liquidated amount should be sufficient to cover
-        // the liquidation fees
+
+        if (!_position.isLong && fee < _position.collateral) {
+            uint256 remainingCollateral = _position.collateral - fee;
+            vault.increasePoolAmount(_collateralToken, remainingCollateral);
+        }
+
+        vault.takeAssetOut(address(0), fee, 0, _collateralToken, _collateralPrice);
+        vault.transferBounty(settingsManager.feeManager(), fee);
+        settingsManager.decreaseOpenInterest(_position.indexToken, _position.owner, _position.isLong, _position.size);
+        vault.decreaseReservedAmount(_collateralToken, _position.reserveAmount);
+        vault.decreasePoolAmount(_collateralToken, fee);
+        positionKeeper.emitLiquidatePositionEvent(_key, _indexPrice, fee);
     }
 
     function _updateTrailingStop(
@@ -632,218 +665,185 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
 
     function _decreasePosition(
-        address _indexToken,
+        bytes32 _key,
         uint256 _sizeDelta,
-        bool _isLong,
-        uint256 _posId,
-        uint256[] memory _prices,
+        address _collateralToken,
+        uint256 _indexPrice,
+        uint256 _collateralPrice,
         Position memory _position
     ) internal {
-        settingsManager.updateCumulativeFundingRate(_indexToken, _isLong);
+        settingsManager.updateFunding(_position.indexToken, _collateralToken);
         settingsManager.decreaseOpenInterest(
-            _indexToken,
+            _position.indexToken,
             _position.owner,
-            _isLong,
+            _position.isLong,
             _sizeDelta
         );
-        positionKeeper.decreaseReservedAmount(_indexToken, _isLong, _sizeDelta);
-        bytes32 key;
+        //Decrease reserveDelta
+        vault.decreaseReservedAmount(_collateralToken, _position.reserveAmount * _sizeDelta / _position.size);
+
+        uint256 prevCollateral;
         uint256[4] memory posData; //[usdOut, fee, collateralDelta, adjustedDelta]
         bool hasProfit;
-        bool isParitalDecrease;
+        bool isParitalClose = _position.size != _sizeDelta;
+        int256 fundingFee;
 
         //Scope to avoid stack too deep error
         {
-            key = _getPositionKey(_position.owner, _indexToken, _isLong, _posId);
-            (posData, hasProfit, isParitalDecrease, _position) = vaultUtils.beforeDecreasePosition(
-                _position.owner,
-                _indexToken,
-                _isLong, 
-                _posId,
-                _sizeDelta,
-                _getFirstParams(_prices),
-                true
+            positionKeeper.updateGlobalShortData(_key, _sizeDelta, _indexPrice, false);
+            prevCollateral = _position.collateral;
+            (hasProfit, fundingFee, posData, _position) = _beforeDecreasePosition(
+                _collateralToken, 
+                _sizeDelta, 
+                _indexPrice, 
+                _position
             );
         }
 
-        //Collect vault fee
-        if (posData[3] > 0) {
-            _accountDeltaAndFeeIntoTotalBalance(
-                key,
-                hasProfit,
-                posData[3],
-                posData[1],
-                address(0),
-                _getLastParams(_prices)
-            );
+        if (!hasProfit && posData[2] > 0 && !_position.isLong) {
+            // Transfer realised losses to the pool for short positions
+            // realised losses for long positions are not transferred here as
+            // increasePoolAmount was already called in increasePosition for longs
+            vault.increasePoolAmount(_collateralToken, posData[2]);
         }
 
-        positionKeeper.unpackAndStorage(key, abi.encode(_position), DataType.POSITION);
+        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
 
-        if (isParitalDecrease) {
-            positionKeeper.emitDecreasePositionEvent(
-                key,
-                _getFirstParams(_prices), 
-                posData[1], 
-                posData[2],
-                _sizeDelta
-            );
-        } else {
-            positionKeeper.emitClosePositionEvent(
-                key,
-                _getFirstParams(_prices), 
-                posData[2],
-                _sizeDelta
-            );
+        if (_position.isLong) {
+            vault.increaseGuaranteedAmount(_collateralToken, isParitalClose ? prevCollateral - _position.collateral : prevCollateral);
+            vault.decreaseGuaranteedAmount(_collateralToken, _sizeDelta);
+        } 
+
+        positionKeeper.emitDecreasePositionEvent(
+            _key,
+            _indexPrice, 
+            posData[2], //collateralDelta
+            _sizeDelta,
+            posData[1], //tradingFee
+            fundingFee,
+            isParitalClose
+        );
+
+        if (posData[0] > 0) {
+            //Decrease poolAmount if usdOut > 0
+            vault.decreasePoolAmount(_collateralToken, posData[0]);
         }
 
         if (posData[1] <= posData[0]) {
-            if (posData[1] != posData[0]) {
-                positionKeeper.decreasePoolAmount(_indexToken, _isLong, posData[0] - posData[1]);
-            }
-            
+            //Transfer asset out if fee < usdOut
             vault.takeAssetOut(
                 _position.owner, 
-                _position.refer, 
-                posData[1], 
-                posData[0], 
-                positionKeeper.getPositionCollateralToken(key), 
-                _getLastParams(_prices)
+                posData[1], //fee
+                posData[0], //usdOut
+                _collateralToken, 
+                _collateralPrice
             );
-        } else if (posData[1] != 0) {
-            vault.distributeFee(_position.owner, _position.refer, posData[1], _indexToken);
+        } else if (posData[1] > 0) {
+            //Distribute fee
+            vault.distributeFee(_key, _position.owner, posData[1]);
         }
+    }
+
+    function _beforeDecreasePosition(
+        address _collateralToken, 
+        uint256 _sizeDelta, 
+        uint256 _indexPrice, 
+        Position memory _position
+    ) internal view returns (bool hasProfit, int256 fundingFee, uint256[4] memory posData, Position memory) {
+        //posData: [usdOut, tradingFee, collateralDelta, adjustedDelta]
+        bytes memory encodedData;
+        (hasProfit, fundingFee, encodedData) = vaultUtils.beforeDecreasePosition(
+            _collateralToken,
+            _sizeDelta,
+            _indexPrice,
+            _position
+        );
+        (posData, _position) = abi.decode(encodedData, ((uint256[4]), (Position)));
+        return (hasProfit, fundingFee, posData, _position);
     }
 
     function _increasePosition(
         bytes32 _key,
         uint256 _amountIn,
         uint256 _sizeDelta,
-        bool _isLong,
-        address[] memory _path,
-        uint256[] memory _prices,
-        Position memory _position
-    ) internal {
-        settingsManager.updateCumulativeFundingRate(_getFirstPath(_path), _isLong);
-        address indexToken;
-        uint256 indexPrice;
-
-        {
-            indexToken = _getFirstPath(_path);
-            indexPrice = _getFirstParams(_prices);
-        }
-
-        if (_position.size == 0) {
-            _position.averagePrice = indexPrice;
-        }
-
-        if (_position.size > 0 && _sizeDelta > 0) {
-            _position.averagePrice = priceManager.getNextAveragePrice(
-                indexToken,
-                _position.size,
-                _position.averagePrice,
-                _isLong,
-                _sizeDelta,
-                indexPrice
-            );
-        }
-        uint256 fee = settingsManager.collectMarginFees(
-            _position.owner,
-            indexToken,
-            _isLong,
-            _sizeDelta,
-            _position.size,
-            _position.entryFundingRate
-        );
-        vault.collectVaultFee(_position.refer, _amountIn);
-
-        //Storage open fee and charge later
-        _position.totalFee += fee;
-        _position.collateral += _amountIn;
-        _position.reserveAmount += _amountIn;
-        _position.entryFundingRate = settingsManager.cumulativeFundingRates(indexToken, _isLong);
-        _position.size += _sizeDelta;
-        _position.lastIncreasedTime = block.timestamp;
-        _position.lastPrice = indexPrice;
-        _accountDeltaAndFeeIntoTotalBalance(
-            bytes32(0),
-            true, 
-            0, 
-            fee, 
-            _getLastPath(_path),
-            _getLastParams(_prices)
-        );
-        
-        settingsManager.validatePosition(_position.owner, indexToken, _isLong, _position.size, _position.collateral);
-        vaultUtils.validateLiquidation(_position.owner, indexToken, _isLong, true, indexPrice, _position);
-        settingsManager.increaseOpenInterest(indexToken, _position.owner, _isLong, _sizeDelta);
-        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
-        positionKeeper.increaseReservedAmount(indexToken, _isLong, _sizeDelta);
-        positionKeeper.increasePoolAmount(indexToken, _isLong, _amountIn);
-        positionKeeper.emitIncreasePositionEvent(
-            _key,
-            indexPrice,
-            fee, 
-            _amountIn, 
-            _sizeDelta
-        );
-    }
-
-    function _accountDeltaAndFeeIntoTotalBalance(
-        bytes32 _key,
-        bool _hasProfit,
-        uint256 _adjustedDelta,
-        uint256 _fee,
         address _collateralToken,
-        uint256 _collateralPrice
-    ) internal {
-        vault.accountDeltaAndFeeIntoTotalBalance(
-            _hasProfit, 
-            _adjustedDelta, 
-            _fee, 
-            _collateralToken == address(0) && uint256(_key) > 0 ? positionKeeper.getPositionCollateralToken(_key) : _collateralToken,
-            _collateralPrice
-        );
-    }
-
-    function _validateDecreasePosition(
-        address _indexToken,
-        bool _isLong,
         uint256 _indexPrice,
         Position memory _position
-    ) internal view {
-        vaultUtils.validateDecreasePosition(_indexToken, _isLong, true, _indexPrice, _position);
-    }
+    ) internal {
+        require(_sizeDelta > 0, "IVLPSD"); //Invalid position sizeDelta
+        settingsManager.updateFunding(_position.indexToken, _collateralToken);
+        positionKeeper.updateGlobalShortData(_key, _sizeDelta, _indexPrice, true);
+        uint256 fee;
 
-    function _calculateMarginFee(
-        address _indexToken, 
-        bool _isLong, 
-        uint256 _sizeDelta, 
-        Position memory _position
-    ) internal view returns (uint256){
-        return settingsManager.collectMarginFees(
-            _position.owner,
-            _indexToken,
-            _isLong,
+        if (_position.size == 0) {
+            _position.averagePrice = _indexPrice;
+            _position.entryFunding = settingsManager.fundingIndex(_position.indexToken);
+            (fee, ) = settingsManager.getFees(
+                _sizeDelta,
+                0,
+                false,
+                false,
+                false,
+                _position
+            );
+        } else {
+            (uint256 newAvgPrice, int256 newEntryFunding) = vaultUtils.reCalculatePosition(
+                _sizeDelta, 
+                _sizeDelta -_amountIn,
+                _indexPrice, 
+                _position
+            );
+            _position.averagePrice = newAvgPrice;
+            _position.entryFunding = newEntryFunding;
+            (fee, ) = settingsManager.getFees(
+                _sizeDelta,
+                _position.size - _position.collateral,
+                true,
+                true,
+                false,
+                _position
+            );
+        }
+
+        //Storage fee and charge later
+        uint256 pendingFee = _position.previousFee + fee;
+        _position.previousFee = 0;
+        _position.collateral += _amountIn;
+        _position.reserveAmount += _amountIn;
+        _position.size += _sizeDelta;
+        _position.lastIncreasedTime = block.timestamp;
+        _position.lastPrice = _indexPrice;
+        
+        settingsManager.validatePosition(
+            _position.owner, 
+            _position.indexToken, 
+            _position.isLong, 
+            _position.size, 
+            _position.collateral
+        );
+        vaultUtils.validateLiquidation(true, true, false, _indexPrice, _position);
+        _position.previousFee = pendingFee;
+        settingsManager.increaseOpenInterest(_position.indexToken, _position.owner, _position.isLong, _sizeDelta);
+        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
+        vault.increaseReservedAmount(_collateralToken, _sizeDelta);
+
+        if (_position.isLong) {
+            //Only increase pool amount for long position
+            vault.increasePoolAmount(_collateralToken, _amountIn);
+            vault.decreasePoolAmount(_collateralToken, uint256(fee));
+            vault.increaseGuaranteedAmount(_collateralToken, _sizeDelta + uint256(fee));
+            vault.decreaseGuaranteedAmount(_collateralToken, _amountIn);
+        } 
+
+        positionKeeper.emitIncreasePositionEvent(
+            _key,
+            _indexPrice,
+            _amountIn, 
             _sizeDelta,
-            _position.size,
-            _position.entryFundingRate
+            fee
         );
     }
 
-    /*
-    @dev: Set the latest lastPrices for fastPriceFeed
-    */
-    function _setLatestPrices(address _indexToken, address[] memory _collateralPath, uint256[] memory _prices) internal {
-        for (uint256 i = 0; i < _prices.length; i++) {
-            uint256 price = _prices[i];
-
-            if (price > 0) {
-                try priceManager.setLatestPrice(i == 0 ? _indexToken : _collateralPath[i + 1], price){}
-                catch {}
-            }
-        }
-    }
 
     function _fromTokenToUSD(uint256 _tokenAmount, uint256 _price, uint256 _decimals) internal pure returns (uint256) {
         return (_tokenAmount * _price) / (10 ** _decimals);
@@ -859,7 +859,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         } else if (_positionType == POSITION_STOP_LIMIT) {
             return OrderType.STOP_LIMIT;
         } else {
-            revert("IVLOT"); //Invalid order type
+            revert("Invalid orderType");
         }
     }
 
@@ -877,6 +877,22 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
     function _getLastParams(uint256[] memory _params) internal pure returns (uint256) {
         return _params[_params.length - 1];
+    }
+
+    function _validateExecutor(address _account) internal view {
+        require(_isExecutor(_account), "FBD"); //Forbidden, not executor 
+    }
+
+    function _validatePositionKeeper() internal view {
+        require(Address.isContract(address(positionKeeper)), "IVLCA"); //Invalid contractAddress
+    }
+
+    function _validateVaultUtils() internal view {
+        require(Address.isContract(address(vaultUtils)), "IVLCA"); //Invalid contractAddress
+    }
+
+    function _validateRouter() internal view {
+        require(Address.isContract(address(positionRouter)), "IVLCA"); //Invalid contractAddress
     }
 
     //This function is using for re-intialized settings

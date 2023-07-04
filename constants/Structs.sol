@@ -41,16 +41,18 @@ struct OrderInfo {
 
 struct Position {
     address owner;
-    address refer;
+    address indexToken;
+    bool isLong;
     int256 realisedPnl;
     uint256 averagePrice;
     uint256 collateral;
-    uint256 entryFundingRate;
+    int256 entryFunding;
     uint256 lastIncreasedTime;
     uint256 lastPrice;
     uint256 reserveAmount;
     uint256 size;
-    uint256 totalFee;
+    uint256 posId;
+    uint256 previousFee;
 }
 
 struct TriggerOrder {
@@ -103,14 +105,6 @@ struct PrepareTransaction {
 struct TxDetail {
     uint256[] params;
     address[] path;
-}
-
-struct PositionBond {
-    address owner;
-    address indexToken;
-    bool isLong;
-    uint256 posId;
-    uint256 leverage;
 }
 
 struct VaultBond {

@@ -13,10 +13,12 @@ contract BasePositionConstants {
     uint256 public constant POSITION_STOP_LIMIT = 3;
     uint256 public constant POSITION_TRAILING_STOP = 4;
 
+    //Change these constants or must notice on login of PositionRouter
     uint256 public constant CREATE_POSITION_MARKET = 1;
     uint256 public constant CREATE_POSITION_LIMIT = 2;
     uint256 public constant CREATE_POSITION_STOP_MARKET = 3;
     uint256 public constant CREATE_POSITION_STOP_LIMIT = 4;
+
     uint256 public constant ADD_COLLATERAL = 5;
     uint256 public constant REMOVE_COLLATERAL = 6;
     uint256 public constant ADD_POSITION = 7;
@@ -62,5 +64,12 @@ contract BasePositionConstants {
         return _txType == CREATE_POSITION_STOP_LIMIT
             || _txType == CREATE_POSITION_STOP_MARKET
             || _txType == CREATE_POSITION_LIMIT;
+    }
+
+    function _isOpenPosition(uint256 _txType) internal pure returns (bool) {
+        return _txType == CREATE_POSITION_MARKET 
+            || _txType == CREATE_POSITION_LIMIT
+            || _txType == CREATE_POSITION_STOP_MARKET
+            || _txType == CREATE_POSITION_STOP_LIMIT;
     }
 }

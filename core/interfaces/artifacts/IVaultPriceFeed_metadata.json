@@ -1,0 +1,145 @@
+{
+	"compiler": {
+		"version": "0.8.19+commit.7dd6d404"
+	},
+	"language": "Solidity",
+	"output": {
+		"abi": [
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_token",
+						"type": "address"
+					}
+				],
+				"name": "getLastPrice",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "_maxDelayAllowance",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address[]",
+						"name": "_tokens",
+						"type": "address[]"
+					}
+				],
+				"name": "getLastPrices",
+				"outputs": [
+					{
+						"internalType": "uint256[]",
+						"name": "",
+						"type": "uint256[]"
+					},
+					{
+						"internalType": "bool",
+						"name": "",
+						"type": "bool"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_token",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "_latestPrice",
+						"type": "uint256"
+					}
+				],
+				"name": "setLatestPrice",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "address",
+						"name": "_token",
+						"type": "address"
+					},
+					{
+						"internalType": "address",
+						"name": "_priceFeed",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "_priceDecimals",
+						"type": "uint256"
+					}
+				],
+				"name": "setTokenConfig",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		],
+		"devdoc": {
+			"kind": "dev",
+			"methods": {},
+			"version": 1
+		},
+		"userdoc": {
+			"kind": "user",
+			"methods": {},
+			"version": 1
+		}
+	},
+	"settings": {
+		"compilationTarget": {
+			"contracts/core/interfaces/IVaultPriceFeed.sol": "IVaultPriceFeed"
+		},
+		"evmVersion": "paris",
+		"libraries": {},
+		"metadata": {
+			"bytecodeHash": "ipfs"
+		},
+		"optimizer": {
+			"enabled": true,
+			"runs": 10
+		},
+		"remappings": []
+	},
+	"sources": {
+		"contracts/core/interfaces/IVaultPriceFeed.sol": {
+			"keccak256": "0x2f4990be389e7f8e5d67a3448078807d26969dbae7d8c40063e745e287f5608b",
+			"license": "MIT",
+			"urls": [
+				"bzz-raw://ff1c7c3a3d035f2be30d2652a80b129378b3d6759b7032f6dcc90fc82f84fa5c",
+				"dweb:/ipfs/QmYheBWdZEkd4gwJ419adBxucj79hmqh8ANsFQuXKGgGiz"
+			]
+		}
+	},
+	"version": 1
+}

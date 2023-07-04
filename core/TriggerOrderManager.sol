@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
 import "./BasePosition.sol";
-import "./interfaces/IRouter.sol";
+import "./interfaces/IPositionRouter.sol";
 import {Constants} from "../constants/Constants.sol";
 import {Position, TriggerStatus, TriggerOrder} from "../constants/Structs.sol";
 
@@ -55,7 +55,7 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
     }
 
     //Config functions
-    function setRouter(address _router) external onlyOwner {
+    function setPositionRouter(address _router) external onlyOwner {
         require(Address.isContract(_router), "Invalid contract address, router");
         router = _router;
         emit SetRouter(_router);
@@ -82,14 +82,14 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
 
         if (position.size == 0) {
             //Trigger for creating position
-            PrepareTransaction memory txn = IRouter(router).getTransaction(key);
+            PrepareTransaction memory txn = IPositionRouter(router).getTransaction(key);
             require(txn.status == TRANSACTION_STATUS_PENDING, "Invalid txStatus");
             txType = _getTxTypeFromPositionType(order.positionType);
             require(_isDelayPosition(txType), "Invalid delayOrder");
-            uint256[] memory params = IRouter(router).getParams(key, txType);
+            uint256[] memory params = IPositionRouter(router).getParams(key, txType);
             require(params.length > 0, "Invalid triggerParams");
 
-            path = IRouter(router).getPath(key, txType);
+            path = IPositionRouter(router).getPath(key, txType);
             require(_indexToken == path[0], "Invalid indexToken");
             (isFastExecute, prices) = _getPricesAndCheckFastExecute(path);
 
@@ -108,7 +108,7 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
         }
 
         require(path.length > 0 && path.length == prices.length, "Invalid arrayLength");
-        IRouter(router).triggerPosition(
+        IPositionRouter(router).triggerPosition(
             key,
             isFastExecute,
             txType,
@@ -255,17 +255,12 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
     }
 
     function validateTPSLTriggers(
-        address _account,
-        address _token,
-        bool _isLong,
-        uint256 _posId
+        bytes32 _key,
+        uint256 _indexPrice
     ) external view override returns (bool) {
         return _validateTPSLTriggers(
-            _account,
-            _token,
-            _isLong,
-            _posId,
-            priceManager.getLastPrice(_token)
+            _key,
+            _indexPrice
         );
     }
 
@@ -275,25 +270,18 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
         bool _isLong,
         uint256 _posId,
         uint256 _indexPrice
-    ) external view override returns (bool) {
-        return _validateTPSLTriggers(
-            _account,
-            _token,
-            _isLong,
-            _posId,
-            _indexPrice
-        );
-    } 
+    ) external view returns (bool) {
+        return _validateTPSLTriggers(_getPositionKey(_account, _token, _isLong, _posId), _indexPrice);
+    }
 
     function _validateTPSLTriggers(
-        address _account,
-        address _token,
-        bool _isLong,
-        uint256 _posId,
+        bytes32 _key,
         uint256 _indexPrice
     ) internal view returns (bool) {
-        bytes32 key = _getPositionKey(_account, _token, _isLong, _posId);
-        TriggerOrder storage order = triggerOrders[key];
+        require(_indexPrice > 0, "Invalid indexPrice");
+        (address owner, , bool isLong, ) = positionKeeper.getBasePosition(_key);
+        require(owner != address(0), "Invalid pOwner");
+        TriggerOrder storage order = triggerOrders[_key];
 
         if (order.status != TriggerStatus.OPEN) {
             return false;
@@ -306,7 +294,7 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
             uint256 closeAmountPercent;
             
             for (uint256 i = 0; i != prices.length && closeAmountPercent < BASIS_POINTS_DIVISOR; ++i) {
-                bool pricesAreUpperBounds = tp ? _isLong : !_isLong;
+                bool pricesAreUpperBounds = tp ? isLong : !isLong;
                 
                 if (triggeredAmounts[i] == 0 && (pricesAreUpperBounds ? prices[i] <= _indexPrice : _indexPrice <= prices[i])) {
                     closeAmountPercent += amountPercents[i];
@@ -376,6 +364,6 @@ contract TriggerOrderManager is ITriggerOrderManager, BasePosition, ReentrancyGu
     }
 
     function _validateRouter() internal view {
-        require(router != address(0), "Router not initialized");
+        require(router != address(0), "PositionRouter not initialized");
     }
 }

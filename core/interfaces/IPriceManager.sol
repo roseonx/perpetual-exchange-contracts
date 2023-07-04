@@ -45,4 +45,6 @@ interface IPriceManager {
     function fromTokenToUSD(address _token, uint256 _tokenAmount, uint256 _tokenPrice) external view returns (uint256);
 
     function getTokenDecimals(address _token) external view returns(uint256);
+
+    function floorTokenAmount(uint256 _amount, address _token) external view returns(uint256);
 }
