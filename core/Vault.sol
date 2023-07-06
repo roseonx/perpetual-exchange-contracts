@@ -75,6 +75,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     );
 
     event TakeAssetOut(
+        bytes32 key,
         address indexed account, 
         address indexed refer, 
         uint256 usdOut, 
@@ -317,6 +318,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function takeAssetOut(
+        bytes32 _key,
         address _account, 
         uint256 _fee, 
         uint256 _usdOut, 
@@ -351,7 +353,16 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
             _tokenPrice,
             feeManager
         );
-        emit TakeAssetOut(_account, refer, _usdOut, _fee, _token, tokenAmountOut, _tokenPrice);
+        emit TakeAssetOut(
+            _key, 
+            _account, 
+            refer, 
+            _usdOut, 
+            _fee, 
+            _token, 
+            tokenAmountOut, 
+            _tokenPrice
+        );
     }
 
     function _takeAssetOut(

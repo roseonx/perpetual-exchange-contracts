@@ -399,7 +399,7 @@ contract SwapHandler is Ownable, ReentrancyGuard, BaseConstants, ISwapHandler, I
         uint256 amountOutAfterFee, 
         address _tokenOut
     ) internal {
-        vault.takeAssetOut(_receiver, fee, amountOutAfterFee + fee, _tokenOut, PRICE_PRECISION);
+        vault.takeAssetOut(bytes32(0), _receiver, fee, amountOutAfterFee + fee, _tokenOut, PRICE_PRECISION);
     }
 
     function _fromTokenToUSD(address _token, uint256 _tokenAmount, uint256 _price) internal view returns (uint256) {

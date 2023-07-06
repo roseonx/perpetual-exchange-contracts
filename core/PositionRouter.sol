@@ -488,7 +488,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             params = txnDetails[_key][_txType].params;
             amountIn = order.pendingCollateral;
         } else {
-            params = abi.decode(_data, (uint256[]));
+            params = _data.length == 0 ? new uint256[](0) : abi.decode(_data, (uint256[]));
             (position, order) = positionKeeper.getPositions(_key);
             amountIn = params.length == 0 ? 0 : _getFirstParams(params);
         }
@@ -537,13 +537,15 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             uint256 swapAmountOut;
             
             if (_isSwapRequired(_path) && _isRequiredAmountOutMin(_txType)) {
+                uint256 amountOutMin = params.length == 0 ? 0 : _getLastParams(params);
+                require(amountOutMin > 0, "IVLSAOM"); //Invalid swap amount out min
                 (isSwapSuccess, swapAmountOut) = _processSwap(
                     _key,
                     position.owner,
                     _txType,
                     amountIn,
                     _path,
-                    _getLastParams(params) //amountOutMin
+                    amountOutMin //amountOutMin
                 );
                 amountIn = priceManager.fromTokenToUSD(
                     _getLastPath(_path), 

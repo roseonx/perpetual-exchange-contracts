@@ -63,6 +63,12 @@ interface IPositionRouter {
 
     /*
     @dev: Add trailing stop.
+    Params length must be 5, which:
+        [0] is pending collateral,
+        [1] is pending size,
+        [2] is step type,
+        [3] is stop price,
+        [4] is step amount
     */
     function addTrailingStop(
         bool _isLong,

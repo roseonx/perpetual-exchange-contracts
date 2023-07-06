@@ -353,13 +353,14 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         address[] memory path = positionKeeper.getPositionFinalPath(_key);
         require(path.length > 0 && path.length == _prices.length, "IVLAL"); //Invalid array length
         (bool hasProfit, uint256 pnl, , ) = vaultUtils.calculatePnl(
-            _key,
             position.size,
             position.size - position.collateral,
             _getFirstParams(_prices),
             true,
             true,
-            false
+            true,
+            false,
+            position
         );
         require(
             hasProfit && pnl >= (vault.getTotalUSD() * settingsManager.maxProfitPercent()) / BASIS_POINTS_DIVISOR,
@@ -401,6 +402,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             vault.increasePoolAmount(_getLastPath(_path), amountInUSD);
         } else {
             vault.takeAssetOut(
+                _key,
                 _position.owner, 
                 0, //Zero fee for removeCollateral
                 _amountIn, 
@@ -602,8 +604,9 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     ) internal {
         settingsManager.updateFunding(_position.indexToken, _collateralToken);
         (uint256 liquidationState, uint256 fee) = vaultUtils.validateLiquidation(
+            false,
             true,
-            true,
+            false,
             true,
             _indexPrice,
             _position
@@ -629,16 +632,25 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             return;
         }
 
+        vault.decreaseReservedAmount(_collateralToken, _position.reserveAmount);
+        uint256 liquidationFee = settingsManager.liquidationFeeUsd();
+
+        if (_position.isLong) {
+            vault.decreaseGuaranteedAmount(_collateralToken, _position.size - _position.collateral);
+
+            if (fee > liquidationFee) {
+                vault.decreasePoolAmount(_collateralToken, fee - liquidationFee);
+            }
+        } 
+
         if (!_position.isLong && fee < _position.collateral) {
             uint256 remainingCollateral = _position.collateral - fee;
             vault.increasePoolAmount(_collateralToken, remainingCollateral);
         }
 
-        vault.takeAssetOut(address(0), fee, 0, _collateralToken, _collateralPrice);
         vault.transferBounty(settingsManager.feeManager(), fee);
         settingsManager.decreaseOpenInterest(_position.indexToken, _position.owner, _position.isLong, _position.size);
-        vault.decreaseReservedAmount(_collateralToken, _position.reserveAmount);
-        vault.decreasePoolAmount(_collateralToken, fee);
+        vault.decreasePoolAmount(_collateralToken, liquidationFee);
         positionKeeper.emitLiquidatePositionEvent(_key, _indexPrice, fee);
     }
 
@@ -700,20 +712,30 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             );
         }
 
-        if (!hasProfit && posData[2] > 0 && !_position.isLong) {
+        //adjustedDelta > 0
+        if (posData[3] > 0) {
+            if (hasProfit && !_position.isLong) {
+            // Pay out realised profits from the pool amount for short positions
+                vault.decreasePoolAmount(_collateralToken, posData[3]);
+            } else if (!hasProfit && !_position.isLong) {
             // Transfer realised losses to the pool for short positions
             // realised losses for long positions are not transferred here as
             // increasePoolAmount was already called in increasePosition for longs
-            vault.increasePoolAmount(_collateralToken, posData[2]);
+                vault.increasePoolAmount(_collateralToken, posData[3]);
+            }
         }
-
-        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
 
         if (_position.isLong) {
             vault.increaseGuaranteedAmount(_collateralToken, isParitalClose ? prevCollateral - _position.collateral : prevCollateral);
             vault.decreaseGuaranteedAmount(_collateralToken, _sizeDelta);
-        } 
 
+            if (posData[0] > 0) {
+                //Decrease pool amount if usdOut > 0 and position is long
+                vault.decreasePoolAmount(_collateralToken, posData[0]);
+            }
+        }
+
+        positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
         positionKeeper.emitDecreasePositionEvent(
             _key,
             _indexPrice, 
@@ -724,14 +746,10 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             isParitalClose
         );
 
-        if (posData[0] > 0) {
-            //Decrease poolAmount if usdOut > 0
-            vault.decreasePoolAmount(_collateralToken, posData[0]);
-        }
-
         if (posData[1] <= posData[0]) {
             //Transfer asset out if fee < usdOut
             vault.takeAssetOut(
+                _key,
                 _position.owner, 
                 posData[1], //fee
                 posData[0], //usdOut
@@ -781,7 +799,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             (fee, ) = settingsManager.getFees(
                 _sizeDelta,
                 0,
-                false,
+                true,
                 false,
                 false,
                 _position
@@ -806,8 +824,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         }
 
         //Storage fee and charge later
-        uint256 pendingFee = _position.previousFee + fee;
-        _position.previousFee = 0;
+        _position.previousFee += fee;
         _position.collateral += _amountIn;
         _position.reserveAmount += _amountIn;
         _position.size += _sizeDelta;
@@ -821,8 +838,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             _position.size, 
             _position.collateral
         );
-        vaultUtils.validateLiquidation(true, true, false, _indexPrice, _position);
-        _position.previousFee = pendingFee;
+        vaultUtils.validateLiquidation(true, false, false, false, _indexPrice, _position);
         settingsManager.increaseOpenInterest(_position.indexToken, _position.owner, _position.isLong, _sizeDelta);
         positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
         vault.increaseReservedAmount(_collateralToken, _sizeDelta);

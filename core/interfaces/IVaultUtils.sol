@@ -19,6 +19,7 @@ interface IVaultUtils {
     function validateLiquidation(
         bytes32 _key,
         bool _raise,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         uint256 _indexPrice
@@ -26,6 +27,7 @@ interface IVaultUtils {
 
     function validateLiquidation(
         bool _raise,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         uint256 _indexPrice,
@@ -105,6 +107,7 @@ interface IVaultUtils {
         uint256 _sizeDelta,
         uint256 _loanDelta,
         uint256 _indexPrice,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         bool _isLiquidated
@@ -114,6 +117,7 @@ interface IVaultUtils {
         uint256 _sizeDelta,
         uint256 _loanDelta,
         uint256 _indexPrice,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         bool _isLiquidated,

@@ -122,6 +122,7 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     event UpdateFunding(address indexed token, int256 fundingIndex);
     event SetMaxFundingRate(uint256 maxFundingRate);
     event SetMaxOpenInterestPerAssetPerSide(address indexed token, bool isLong, uint256 maxOIAmount);
+    event SetBorrowFeeFactor(address indexToken, uint256 feeFactor);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
@@ -659,6 +660,11 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         }
 
         lastFundingTimes[_indexToken] = block.timestamp;
+    }
+
+    function setBorrowFeeFactor(address _indexToken, uint256 _borrowFeeFactor) external onlyOwner {
+        borrowFeeFactor[_indexToken] = _borrowFeeFactor;
+        emit SetBorrowFeeFactor(_indexToken, _borrowFeeFactor);
     }
 
     /*

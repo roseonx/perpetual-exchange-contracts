@@ -137,6 +137,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     function validateLiquidation(
         bytes32 _key,
         bool _raise,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         uint256 _indexPrice
@@ -144,7 +145,8 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         _isValidContract(address(positionKeeper));
         Position memory position = positionKeeper.getPosition(_key);
         return validateLiquidation(
-            _raise, 
+            _raise,
+            _isApplyTradingFee,
             _isApplyBorrowFee, 
             _isApplyFundingFee,
             _indexPrice,
@@ -154,21 +156,30 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
 
     function validateLiquidation(
         bool _raise,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         uint256 _indexPrice,
         Position memory _position
     ) public view returns (uint256, uint256) {
         if (_position.averagePrice > 0) {
-            (bool hasProfit, uint256 delta, uint256 tradingFee, ) = calculatePnl(
-                _position.size,
-                _position.size - _position.collateral,
-                _indexPrice,
-                _isApplyBorrowFee,
-                _isApplyFundingFee,
-                true,
-                _position
-            );
+            bool hasProfit;
+            uint256 delta;
+            uint256 tradingFee;
+
+            //Scope to avoid stack too deep error
+            {
+                (hasProfit, delta, tradingFee, ) = calculatePnl(
+                    _position.size,
+                    _position.size - _position.collateral,
+                    _indexPrice,
+                    _isApplyTradingFee,
+                    _isApplyBorrowFee,
+                    _isApplyFundingFee,
+                    true,
+                    _position
+                );
+            }
 
             if (!hasProfit && _position.collateral < delta) {
                 if (_raise) {
@@ -178,19 +189,18 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
                 return (LIQUIDATE_FEE_EXCEED, _position.collateral);
             }
 
-            uint256 remainingCollateral = _position.collateral;
-
-            if (!hasProfit) {
-                remainingCollateral = _position.collateral - delta;
-            }
-
             if (_position.collateral * priceManager.maxLeverage(_position.indexToken) < _position.size * MIN_LEVERAGE) {
                 if (_raise) {
                     revert("Vault: Max leverage exceeded");
                 }
             }
 
-            return _checkMaxThreshold(remainingCollateral, _position.size, tradingFee, _position.indexToken, _raise);
+            return _checkMaxThreshold(
+                !hasProfit ? _position.collateral - delta : _position.collateral, 
+                _position.size, 
+                tradingFee, 
+                _position.indexToken, 
+                _raise);
         } else {
             return (LIQUIDATE_NONE_EXCEED, 0);
         }
@@ -546,7 +556,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             require(_position.collateral >= previousFee, "Fee exceeded positionCollateral");
         }
 
-        validateLiquidation(true, !_isPlus, !_isPlus, _indexPrice, _position);
+        validateLiquidation(true, true, !_isPlus, !_isPlus, _indexPrice, _position);
         _position.lastIncreasedTime = block.timestamp;
         _position.previousFee = previousFee;
         return (_amountIn, _position);
@@ -605,7 +615,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             require(_sizeDelta <= _position.size, "PositionSize exceeded");
             _position.size -= _sizeDelta;
             _validateSizeCollateralAmount(_position.size, _position.collateral);
-            validateLiquidation(true, false, false, _indexPrice, _position);
+            validateLiquidation(true, false, false, false, _indexPrice, _position);
         } else {
             _position.size = 0;
         }
@@ -626,7 +636,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         //Scope to avoid stack too deep error
         {
             uint256 delta;
-            (hasProfit, delta, tradingFee, fundingFee) = calculatePnl(
+            (hasProfit, delta, tradingFee, fundingFee) = _calculatePnlNoneLiquidate(
                 _sizeDelta,
                 _position.size - _position.collateral,
                 _indexPrice,
@@ -682,6 +692,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         uint256 _sizeDelta,
         uint256 _loanDelta,
         uint256 _indexPrice,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         bool _isLiquidated
@@ -697,6 +708,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             _sizeDelta,
             _loanDelta,
             _indexPrice,
+            _isApplyTradingFee,
             _isApplyBorrowFee,
             _isApplyFundingFee,
             _isLiquidated,
@@ -708,6 +720,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         uint256 _sizeDelta,
         uint256 _loanDelta,
         uint256 _indexPrice,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         bool _isLiquidated,
@@ -738,7 +751,8 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         {
             (tradingFee, fundingFee) = _calculateFees(
                 _sizeDelta, 
-                _loanDelta, 
+                _loanDelta,
+                _isApplyTradingFee,
                 _isApplyBorrowFee, 
                 _isApplyFundingFee, 
                 _position
@@ -750,6 +764,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             }
         }
 
+        //Not apply bonus fundingFee if position is liquidated
         if (_isLiquidated && fundingFee < 0) {
             fundingFee = 0;
         }
@@ -759,9 +774,31 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             : (false, uint256(-1 * pnl), tradingFee, fundingFee);
     }
 
+    function _calculatePnlNoneLiquidate(
+        uint256 _sizeDelta,
+        uint256 _loanDelta,
+        uint256 _indexPrice,
+        bool _isApplyTradingFee,
+        bool _isApplyBorrowFee,
+        bool _isApplyFundingFee,
+        Position memory _position
+    ) internal view returns (bool, uint256, uint256, int256) {
+        return calculatePnl(
+            _sizeDelta,
+            _loanDelta,
+            _indexPrice,
+            _isApplyTradingFee,
+            _isApplyBorrowFee,
+            _isApplyFundingFee,
+            false,
+            _position
+        );
+    }
+
     function _calculateFees(
         uint256 _sizeDelta,
         uint256 _loanDelta,
+        bool _isApplyTradingFee,
         bool _isApplyBorrowFee,
         bool _isApplyFundingFee,
         Position memory _position
@@ -770,6 +807,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         return settingsManager.getFees(
             _sizeDelta,
             _loanDelta,
+            _isApplyTradingFee,
             _isApplyBorrowFee, 
             _isApplyFundingFee,
             _position
@@ -813,5 +851,9 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
 
     function _isValidPosition(Position memory _position) internal pure {
         require(_position.owner != address(0), "Position notExist");
+    }
+
+    function getPositionKey(address _account, address _indexToken, bool _isLong, uint256 _posId) external pure returns (bytes32) {
+        return _getPositionKey(_account, _indexToken, _isLong, _posId);
     }
 }

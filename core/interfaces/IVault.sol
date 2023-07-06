@@ -38,6 +38,7 @@ interface IVault {
     ) external;
 
     function takeAssetOut(
+        bytes32 _key,
         address _account, 
         uint256 _fee, 
         uint256 _usdOut, 
