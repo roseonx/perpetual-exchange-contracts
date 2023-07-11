@@ -68,8 +68,6 @@ contract BasePositionConstants {
 
     function _isOpenPosition(uint256 _txType) internal pure returns (bool) {
         return _txType == CREATE_POSITION_MARKET 
-            || _txType == CREATE_POSITION_LIMIT
-            || _txType == CREATE_POSITION_STOP_MARKET
-            || _txType == CREATE_POSITION_STOP_LIMIT;
+            || _isDelayPosition(_txType);
     }
 }

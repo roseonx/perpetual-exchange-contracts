@@ -93,7 +93,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         address[] memory _path
     ) external payable nonReentrant preventTradeForForexCloseTime(_getFirstPath(_path)) {
         require(!settingsManager.isEmergencyStop(), "EMSTP"); //Emergency stopped
-        _prevalidate(_path, _getLastParams(_params));
+        bool shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
 
         if (_orderType != OrderType.MARKET) {
             require(msg.value == settingsManager.triggerGasFee(), "IVLTGF"); //Invalid triggerGasFee
@@ -108,37 +108,9 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _verifyParamsLength(txType, _params);
         }
 
-        uint256 posId;
-        Position memory position;
-        OrderInfo memory order;
-
-        //Scope to avoid stack too deep error
-        {
-            posId = positionKeeper.lastPositionIndex(msg.sender);
-            (position, order) = positionKeeper.getPositions(msg.sender, _getFirstPath(_path), _isLong, posId);
-            require(position.owner == address(0), "IVLPO"); //Invalid positionOwner
-            position.owner = msg.sender;
-            position.indexToken = _path[0];
-            position.posId = posId;
-            position.isLong = _isLong;
-
-            order.pendingCollateral = _params[4];
-            order.pendingSize = _params[5];
-            order.collateralToken = _path[1];
-            order.status = OrderStatus.PENDING;
-        }
-
-        bytes32 key;
-
-        //Scope to avoid stack too deep error
-        {
-            key = _getPositionKeyAndCheck(msg.sender, _getFirstPath(_path), _isLong, posId, false);
-        }
-
         bool isFastExecute;
         uint256[] memory prices;
 
-        //Scope to avoid stack too deep error
         {
             (isFastExecute, prices) = _getPricesAndCheckFastExecute(_path);
             vaultUtils.validatePositionData(
@@ -149,9 +121,58 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
                 _params, 
                 true
             );
+        }
 
-            require(txnDetails[key][txType].params.length == 0, "InP");
-            txnDetails[key][txType].params = _params;
+        (bytes32 key, Position memory position, OrderInfo memory order) = _createPosition(
+            msg.sender,
+            _isLong,
+            _orderType,
+            txType,
+            _path,
+            _params
+        );
+
+        _modifyPosition(
+            key,
+            txType,
+            true, //isTakeAssetRequired = true for openNewPosition
+            shouldSwap,
+            isFastExecute = txType != CREATE_POSITION_MARKET ? false : isFastExecute, //Only fast execute for market type
+            _path,
+            prices,
+            abi.encode(position, order)
+        );
+    }
+
+    function _createPosition(
+        address _account,
+        bool _isLong,
+        OrderType _orderType,
+        uint256 _txType,
+        address[] memory _path,
+        uint256[] memory _params
+    ) internal returns (bytes32, Position memory, OrderInfo memory) {
+        uint256 posId = positionKeeper.lastPositionIndex(_account);
+        bytes32 key = _getPositionKey(_account, _path[0], _isLong, posId);
+        require(txnDetails[key][_txType].params.length == 0, "InP");
+        txnDetails[key][_txType].params = _params;
+
+        Position memory position;
+        OrderInfo memory order;
+
+        //Scope to avoid stack too deep error
+        {
+            (position, order) = positionKeeper.getPositions(key);
+            require(position.owner == address(0), "IVLPO/E"); //Invalid positionOwner/existed
+            position.owner = msg.sender;
+            position.indexToken = _path[0];
+            position.posId = posId;
+            position.isLong = _isLong;
+
+            order.pendingCollateral = _params[4];
+            order.pendingSize = _params[5];
+            order.collateralToken = _path[1];
+            order.status = OrderStatus.PENDING;
         }
 
         if (_orderType == OrderType.MARKET) {
@@ -170,34 +191,18 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             revert("IVLOT"); //Invalid order type
         }
 
-        bytes memory data;
-
-        //Scope to avoid stack too deep error
-        {
-            data = abi.encode(position, order);
-        }
-
-        _modifyPosition(
-            key,
-            txType,
-            true, //isTakeAssetRequired = true for openNewPosition
-            isFastExecute = txType != CREATE_POSITION_MARKET ? false : isFastExecute, //Only fast execute for market type
-            _path,
-            prices,
-            data
-        );
+        return (key, position, order);
     }
 
     function _revertExecute(
         bytes32 _key, 
         uint256 _txType,
-        bool _isTakeAssetBack,
         uint256[] memory _params, 
         uint256[] memory _prices, 
         address[] memory _path,
         string memory err
     ) internal {
-        if (_isTakeAssetBack) {
+        if (_isTakeAssetBackRequired(_txType)) {
             _takeAssetBack(_key, _txType);
         }
 
@@ -205,6 +210,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
 
         if (_txType == CREATE_POSITION_MARKET || 
             _txType == ADD_TRAILING_STOP || 
+            _txType == ADD_COLLATERAL ||
             _isDelayPosition(_txType)) {
                 positionHandler.modifyPosition(
                     _key,
@@ -237,12 +243,14 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         uint256[] memory _params,
         address[] memory _path
     ) external override nonReentrant preventTradeForForexCloseTime(_getFirstPath(_path)) {
+        bool shouldSwap;
+
         if (_isPlus) {
             _verifyParamsLength(ADD_COLLATERAL, _params);
-            _prevalidate(_path, _getLastParams(_params));
+            shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
         } else {
             _verifyParamsLength(REMOVE_COLLATERAL, _params);
-            _prevalidate(_path, 0, false);
+            shouldSwap = _prevalidateAndCheckSwap(_path, 0, false);
         }
 
         bytes32 key;
@@ -268,6 +276,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId),
             _isPlus ? ADD_COLLATERAL : REMOVE_COLLATERAL,
             _isPlus ? true : false, //isTakeAssetRequired = true for addCollateral
+            _isPlus ? shouldSwap : false,
             isFastExecute,
             _path,
             prices,
@@ -283,13 +292,14 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
     ) external payable override nonReentrant preventTradeForForexCloseTime(_getFirstPath(_path)) {
         require(msg.value == settingsManager.triggerGasFee(), "IVLTGF");
         _verifyParamsLength(ADD_POSITION, _params);
-        _prevalidate(_path, _getLastParams(_params));
+        bool shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
         payable(settingsManager.getFeeManager()).transfer(msg.value);
         (, uint256[] memory prices) = _getPricesAndCheckFastExecute(_path);
         _modifyPosition(
             _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId),
             ADD_POSITION,
             true, //isTakeAssetRequired = true for addPosition
+            shouldSwap,
             false, //isFastExecute disabled for addPosition
             _path,
             prices,
@@ -304,7 +314,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         address[] memory _path
     ) external payable override nonReentrant {
         require(msg.value == settingsManager.triggerGasFee(), "IVLTGF"); //Invalid triggerFasFee
-        _prevalidate(_path, 0, false);
+        _prevalidateAndCheckSwap(_path, 0, false);
         _verifyParamsLength(ADD_TRAILING_STOP, _params);
         payable(settingsManager.getFeeManager()).transfer(msg.value);
 
@@ -314,6 +324,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId),
             ADD_TRAILING_STOP,
             false, //isTakeAssetRequired = false for addTrailingStop
+            false, //shouldSwap = false for addTrailingStop
             true, //isFastExecute = true for addTrailingStop
             _path,
             prices,
@@ -345,6 +356,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _getPositionKeyV2(msg.sender, _indexToken, _isLong, _posId),
             UPDATE_TRAILING_STOP,
             false, //isTakeAssetRequired = false for updateTrailingStop
+            false, //shouldSwap = false for updateTrailingStop
             _isExecutor(msg.sender) ? true : isFastExecute,
             _getSinglePath(_indexToken),
             prices,
@@ -367,6 +379,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _getPositionKeyV2(msg.sender, _indexToken, _isLong, _posId),
             CANCEL_PENDING_ORDER,
             false, //isTakeAssetRequired = false for cancelPendingOrder
+            false, //shouldSwap = false for cancelPendingOrder
             true, //isFastExecute = true for cancelPendingOrder
             path,
             prices,
@@ -390,6 +403,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _key,
             _txType,
             false, //isTakeAssetRequired = false for triggerPosition
+            false, //shouldSwap = false for triggerPosition
             msg.sender == address(triggerOrderManager) ? true : _isFastExecute,
             _path,
             _prices,
@@ -403,13 +417,14 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         uint256[] memory _params,
         address[] memory _path
     ) external override nonReentrant preventTradeForForexCloseTime(_getFirstPath(_path)) {
-        _prevalidate(_path, 0, false);
+        _prevalidateAndCheckSwap(_path, 0, false);
         _verifyParamsLength(CLOSE_POSITION, _params);
         (bool isFastExecute, uint256[] memory prices) = _getPricesAndCheckFastExecute(_path);
         _modifyPosition(
             _getPositionKeyV2(msg.sender, _path[0], _isLong, _posId),
             CLOSE_POSITION,
             false, //isTakeAssetRequired = false for closePosition
+            false, //shouldSwap = false for closePosition
             isFastExecute,
             _path,
             prices,
@@ -432,14 +447,18 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         string memory err
     ) external override {
         require(_isExecutor(msg.sender) || msg.sender == address(positionHandler), "FBD"); //Forbidden
-        require(txns[_key].status == TRANSACTION_STATUS_PENDING, "IVLPTS/NPND"); //Invalid preapre transaction status, must pending
+
+        if (_txType != TRIGGER_POSITION) {
+            //Invalid preapre transaction status, must pending
+            require(txns[_key].status == TRANSACTION_STATUS_PENDING, "IVLPTS/NPND");
+        }
+
         require(_path.length > 0 && _prices.length == _path.length, "IVLAL"); //Invalid array length
         txns[_key].status == TRANSACTION_STATUS_EXECUTE_REVERTED;
 
         _revertExecute(
             _key, 
             _txType,
-            _isTakeAssetBackRequired(_txType),
             _getParams(_key, _txType), 
             _prices, 
             _path,
@@ -448,17 +467,16 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
     }
 
     function _isTakeAssetBackRequired(uint256 _txType) internal pure returns (bool) {
-        return (_txType == CREATE_POSITION_MARKET || 
-            _isDelayPosition(_txType) || 
+        return _isOpenPosition(_txType) ||
             _txType == ADD_COLLATERAL || 
-            _txType == ADD_POSITION
-        );
+            _txType == ADD_POSITION;
     }
 
     function _modifyPosition(
         bytes32 _key,
         uint256 _txType,
         bool _isTakeAssetRequired,
+        bool _shouldSwap,
         bool _isFastExecute,
         address[] memory _path,
         uint256[] memory _prices,
@@ -490,7 +508,8 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         } else {
             params = _data.length == 0 ? new uint256[](0) : abi.decode(_data, (uint256[]));
             (position, order) = positionKeeper.getPositions(_key);
-            amountIn = params.length == 0 ? 0 : _getFirstParams(params);
+            amountIn = params.length == 0 ? 0 
+                : (_isOpenPosition(_txType) && params.length > 5 ? params[4] : _getFirstParams(params));
         }
 
         //Transfer collateral to vault if required
@@ -503,6 +522,42 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
                 _key,
                 _txType
             );
+        }
+
+        if (_shouldSwap && _isFastExecute) {
+            bool isSwapSuccess;
+            address collateralToken;
+            
+            {
+                (isSwapSuccess, collateralToken, amountIn) = _processSwap(
+                    _key,
+                    position.owner,
+                    _txType,
+                    amountIn,
+                    _path,
+                    _prices,
+                    params.length > 0 ? _getLastParams(params) : 0
+                );
+
+                if (!isSwapSuccess) {
+                    if (!(_isOpenPosition(_txType) && _isOpenPositionData(_data))) {
+                        _revertExecute(
+                            _key,
+                            _txType,
+                            params,
+                            _prices,
+                            _path,
+                            "SWF" //Swap failed
+                        );
+                    }
+
+                    return;
+                }
+            }
+
+            if (_isOpenPosition(_txType) && _isOpenPositionData(_data)) {
+                order.collateralToken = collateralToken;
+            }
         }
 
         if (!_isFastExecute) {
@@ -530,56 +585,9 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             require(position.owner != address(0) && position.size > 0, "IVLPS/NI"); //Invalid position, not initialized
         }
 
-        bool isSwapSuccess = true;
-
-        //Scope to avoid stack too deep error
-        {
-            uint256 swapAmountOut;
-            
-            if (_isSwapRequired(_path) && _isRequiredAmountOutMin(_txType)) {
-                uint256 amountOutMin = params.length == 0 ? 0 : _getLastParams(params);
-                require(amountOutMin > 0, "IVLSAOM"); //Invalid swap amount out min
-                (isSwapSuccess, swapAmountOut) = _processSwap(
-                    _key,
-                    position.owner,
-                    _txType,
-                    amountIn,
-                    _path,
-                    amountOutMin //amountOutMin
-                );
-                amountIn = priceManager.fromTokenToUSD(
-                    _getLastPath(_path), 
-                    swapAmountOut, 
-                    _getLastParams(_prices)
-                );
-                order.collateralToken = _getLastPath(_path);
-            }
-        }
-
-        if (!isSwapSuccess) {
-            _revertExecute(
-                _key,
-                _txType,
-                true,
-                params,
-                _prices,
-                _path,
-                "SWF"
-            );
-
-            return;
-        }
-
         bytes memory data;
 
         if (_isOpenPosition(_txType) && (_isOpenPositionData(_data) || _txType == CREATE_POSITION_MARKET)) {
-            if (!isSwapSuccess) {
-                order.pendingCollateral = 0;
-                order.pendingSize = 0;
-                order.collateralToken = address(0);
-                order.status = OrderStatus.CANCELED;
-            }
-
             data = abi.encode(_isFastExecute, _isOpenPositionData(_data), params, position, order);
         } else if (_txType == ADD_COLLATERAL || _txType == REMOVE_COLLATERAL) {
             data = abi.encode(amountIn, position);
@@ -740,7 +748,8 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _modifyPosition(
                 _key,
                 LIQUIDATE_POSITION,
-                false, //isTakeAssetRequired = false for executing
+                false, //isTakeAssetRequired = false for executing,
+                false, //shouldSwap = false for executing
                 true, //isFastExecute = true for executing
                 _path,
                 _prices,
@@ -757,7 +766,6 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _revertExecute(
                 _key,
                 _txType,
-                _isTakeAssetBackRequired(_txType),
                 _getParams(_key, _txType),
                 _prices,
                 _path,
@@ -778,6 +786,7 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
             _key,
             _txType,
             false, //isTakeAssetRequired = false for executing
+            false, //shouldSwap = false for executing
             true, //isFastExecute = true for executing
             _path,
             _prices,
@@ -789,25 +798,28 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         return _isDelayPosition(_txType) || _txType == ADD_TRAILING_STOP || _txType == TRIGGER_POSITION;
     }
 
-    function _prevalidate(
+    function _prevalidateAndCheckSwap(
         address[] memory _path, 
         uint256 _amountOutMin
-    ) internal view {
-        _prevalidate(_path, _amountOutMin, true);
+    ) internal view returns (bool) {
+        return _prevalidateAndCheckSwap(_path, _amountOutMin, true);
     }
 
-    function _prevalidate(
+    function _prevalidateAndCheckSwap(
         address[] memory _path, 
         uint256 _amountOutMin,
         bool _isVerifyAmountOutMin
-    ) internal view {
-        require(_path.length >= 2 && _path.length <= 3, "IVLPTL"); //Invalid path length
+    ) internal view returns (bool) {
+        require(_path.length >= 2, "IVLPTL"); //Invalid path length
         _prevalidate(_getFirstPath(_path));
         bool shouldSwap = settingsManager.validateCollateralPathAndCheckSwap(_path);
 
-        if (shouldSwap && (_path.length - 1 == 2) && _isVerifyAmountOutMin && _amountOutMin == 0) {
-            revert("IVLAOM"); //Invalid amountOutMin
+        if (shouldSwap && (_path.length > 2)) {
+            //Invalid amountOutMin/swapRouter
+            require(_isVerifyAmountOutMin && _amountOutMin > 0 && address(swapRouter) != address(0), "IVLAOM/SR"); 
         }
+
+        return shouldSwap;
     }
 
     function _getFirstPath(address[] memory _path) internal pure returns (address) {
@@ -847,23 +859,26 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
         uint256 _txType,
         uint256 _pendingCollateral,
         address[] memory _path,
+        uint256[] memory _prices,
         uint256 _amountOutMin 
-    ) internal returns (bool, uint256) {
-        if (_path.length < 2 || address(swapRouter) == address(0)) {
-            return (false, _pendingCollateral);
-        }
+    ) internal returns (bool, address, uint256) {
+        uint256 tokenOutPrice = _prices.length == 0 ? 0 : _getLastParams(_prices);
+        require(tokenOutPrice > 0, "IVLTP"); //Invalid token price
 
-        (bool isSwapSuccess, , uint256 swapAmountOut) = swapRouter.swapFromInternal(
+        try swapRouter.swapFromInternal(
             _account,
             _key,
             _txType,
-            _path[1],
             _pendingCollateral,
-            _getLastPath(_path),
-            _amountOutMin
-        );
-
-        return isSwapSuccess ? (true, swapAmountOut) : (false, _pendingCollateral); 
+            _amountOutMin,
+            _path
+        ) returns (address tokenOut, uint256 swapAmountOut) {
+            uint256 swapAmountOutInUSD = priceManager.fromTokenToUSD(tokenOut, swapAmountOut, tokenOutPrice);
+            require(swapAmountOutInUSD > 0, "IVLSAP"); //Invalid swap amount price
+            return (true, tokenOut, swapAmountOutInUSD);
+        } catch {
+            return (false, _path[1], _pendingCollateral);
+        }
     }
 
     function _takeAssetBack(bytes32 _key, uint256 _txType) internal {
@@ -974,6 +989,6 @@ contract PositionRouter is BaseRouter, IPositionRouter, ReentrancyGuard {
     @dev: Min encode data length for position 13 struct and order 9 struct are 22 * 32 = 704
     */
     function _isOpenPositionData(bytes memory _data) internal pure returns (bool) {
-        return _data.length >= 704;     
+        return _data.length == 704;     
     }
 }

@@ -212,7 +212,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             account = position.owner;
 
             if (originalTxType == CREATE_POSITION_MARKET && position.size == 0) {
-                positionKeeper.deletePosition(_key);
+                positionKeeper.deletePositions(_key);
             } else if (originalTxType == ADD_TRAILING_STOP || 
                     originalTxType == ADD_COLLATERAL || 
                     _isDelayPosition(originalTxType)) {
@@ -225,10 +225,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         //Reduce vault bond
         bool isTriggerDelayPosition = _txType == TRIGGER_POSITION && isDelayPosition;
 
-        if (_txType == CREATE_POSITION_MARKET ||
-                _txType == ADD_COLLATERAL ||
-                _txType == ADD_POSITION ||
-                isTriggerDelayPosition) {
+        if (_txType == ADD_COLLATERAL ||  _txType == ADD_POSITION || isTriggerDelayPosition) {
             uint256 exactTxType = isTriggerDelayPosition && delayPositionTxType > 0 ? delayPositionTxType : _txType;
             vault.decreaseBond(_key, account, exactTxType);
         }
@@ -859,7 +856,6 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             fee
         );
     }
-
 
     function _fromTokenToUSD(uint256 _tokenAmount, uint256 _price, uint256 _decimals) internal pure returns (uint256) {
         return (_tokenAmount * _price) / (10 ** _decimals);

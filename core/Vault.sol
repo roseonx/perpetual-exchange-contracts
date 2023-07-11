@@ -394,13 +394,13 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     ) external override {
         _isPosition();
         VaultBond memory bond = bonds[_key][_txType];
-        require(bond.owner == _account, "Invalid bond owner to take back");
-        require(bond.amount >= 0, "Insufficient bond to take back");
-        require(bond.token != address(0), "Invalid bonds token to take back");
-        IERC20(bond.token).safeTransfer(_account, bond.amount);
-        _decreaseBond(_key, _account, _txType);
-        _decreaseTokenBalances(bond.token, bond.amount);
-        emit TakeAssetBack(_account, bond.amount, bond.token, _key, _txType);
+
+        if (bond.owner == _account && bond.amount >= 0 && bond.token != address(0)) {
+            IERC20(bond.token).safeTransfer(_account, bond.amount);
+            _decreaseBond(_key, _account, _txType);
+            _decreaseTokenBalances(bond.token, bond.amount);
+            emit TakeAssetBack(_account, bond.amount, bond.token, _key, _txType);
+        }
     }
 
     function decreaseBond(bytes32 _key, address _account, uint256 _txType) external {
@@ -411,13 +411,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     function _decreaseBond(bytes32 _key, address _account, uint256 _txType) internal {
         VaultBond storage bond = bonds[_key][_txType];
 
-        if (bond.owner != (address(0))) {
-            require(bond.owner == _account, "Invalid bond owner");
-
-            if (bond.amount > 0) {
-                bond.amount = 0;
-                bond.token = address(0);
-            }
+        if (bond.owner != address(0) && bond.owner == _account && bond.amount > 0) {
+            bond.amount = 0;
+            bond.token = address(0);
         }
     }
 
