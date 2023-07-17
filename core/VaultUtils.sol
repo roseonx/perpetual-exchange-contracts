@@ -562,9 +562,8 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         return (_amountIn, _position);
     }
 
-    function beforeDecreasePosition(
+    function beforeDecreasePositionV2(
         bytes32 _key,
-        address _collateralToken,
         uint256 _sizeDelta,
         uint256 _indexPrice
     ) external view returns (bool, int256, uint256[4] memory, Position memory) {
@@ -575,7 +574,6 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         int256 fundingFee;
 
         (hasProfit, fundingFee, encodedData) = beforeDecreasePosition(
-            _collateralToken,
             _sizeDelta,
             _indexPrice,
             position
@@ -587,13 +585,11 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
     }
 
     function beforeDecreasePosition(
-        address _collateralToken,
         uint256 _sizeDelta,
         uint256 _indexPrice,
         Position memory _position
     ) public view returns (bool, int256, bytes memory) {
         _isValidPosition(_position);
-        require(vault.reservedAmounts(_collateralToken) >= _sizeDelta, "Vault: reservedAmounts exceeded");
         uint256 decreaseReserveAmount = (_position.reserveAmount * _sizeDelta) / _position.size;
         require(decreaseReserveAmount <= _position.reserveAmount, "Insufficient positionReserve");
         _position.reserveAmount -= decreaseReserveAmount;
@@ -769,7 +765,10 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
             fundingFee = 0;
         }
 
-        pnl = pnl - fundingFee - int256(tradingFee); 
+        if (fundingFee != 0) {
+            pnl -= fundingFee;
+        }
+
         return pnl > 0 ? (true, uint256(pnl), tradingFee, fundingFee) 
             : (false, uint256(-1 * pnl), tradingFee, fundingFee);
     }

@@ -41,7 +41,6 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     uint256 public override delayDeltaTime = 1 minutes;
     uint256 public override depositFee = 300; // 0.3%
     uint256 public override feeRewardBasisPoints = 50000; // 50%
-    uint256 public override fundingInterval = 8 hours;
     uint256 public override liquidationFeeUsd; // 0 usd
     uint256 public override stakingFee = 300; // 0.3%
     uint256 public override unstakingFee;
@@ -96,7 +95,6 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
     event SetEnableStable(address indexed token, bool isEnabled);
     event SetEnableStaking(address indexed token, bool isEnabled);
     event SetEnableUnstaking(bool isEnabled);
-    event SetFundingInterval(uint256 indexed fundingInterval);
     event SetFundingRateFactor(address indexed token, uint256 fundingRateFactor);
     event SetLiquidationFeeUsd(uint256 indexed _liquidationFeeUsd);
     event SetMarginFeeBasisPoints(address indexed token, bool isLong, uint256 marginFeeBasisPoints);
@@ -334,13 +332,6 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         emit SetEnableStaking(_token, _isEnabled);
     }
 
-    function setFundingInterval(uint256 _fundingInterval) external onlyOwner {
-        require(_fundingInterval >= MIN_FUNDING_RATE_INTERVAL, "FundingInterval should be greater than MIN");
-        require(_fundingInterval <= MAX_FUNDING_RATE_INTERVAL, "FundingInterval should be smaller than MAX");
-        fundingInterval = _fundingInterval;
-        emit SetFundingInterval(fundingInterval);
-    }
-
     function setFundingRateFactor(address _token, uint256 _fundingRateFactor) external onlyOwner {
         require(_fundingRateFactor <= MAX_FUNDING_RATE_FACTOR, "FundingRateFactor should be smaller than MAX");
         fundingRateFactor[_token] = _fundingRateFactor;
@@ -402,7 +393,7 @@ contract SettingsManager is ISettingsManager, Ownable, Constants {
         }
     }
 
-    function getFees(
+    function getFeesV2(
         bytes32 _key,
         uint256 _sizeDelta,
         uint256 _loanDelta,

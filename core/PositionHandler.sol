@@ -702,7 +702,6 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             positionKeeper.updateGlobalShortData(_key, _sizeDelta, _indexPrice, false);
             prevCollateral = _position.collateral;
             (hasProfit, fundingFee, posData, _position) = _beforeDecreasePosition(
-                _collateralToken, 
                 _sizeDelta, 
                 _indexPrice, 
                 _position
@@ -760,7 +759,6 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     }
 
     function _beforeDecreasePosition(
-        address _collateralToken, 
         uint256 _sizeDelta, 
         uint256 _indexPrice, 
         Position memory _position
@@ -768,7 +766,6 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         //posData: [usdOut, tradingFee, collateralDelta, adjustedDelta]
         bytes memory encodedData;
         (hasProfit, fundingFee, encodedData) = vaultUtils.beforeDecreasePosition(
-            _collateralToken,
             _sizeDelta,
             _indexPrice,
             _position

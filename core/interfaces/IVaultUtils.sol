@@ -88,15 +88,13 @@ interface IVaultUtils {
         Position memory _position
     ) external returns (uint256, Position memory);
 
-    function beforeDecreasePosition(
+    function beforeDecreasePositionV2(
         bytes32 _key,
-        address _collateralToken,
         uint256 _sizeDelta,
         uint256 _indexPrice
     ) external view returns (bool, int256, uint256[4] memory, Position memory);
 
     function beforeDecreasePosition(
-        address _collateralToken,
         uint256 _sizeDelta,
         uint256 _indexPrice,
         Position memory _position

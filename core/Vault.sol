@@ -484,30 +484,48 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     function _getTotalUSD() internal view returns (uint256) {
         uint256 aum = aumAddition;
         uint256 shortProfits;
+        uint256 collateralsLength = collateralTokens.length();
+        address[] memory whitelistTokens = getWhitelistTokens();
 
-        for (uint256 i = 0; i < collateralTokens.length(); i++) {
-            if (settingsManager.isStable(collateralTokens.at(i))) {
+        for (uint256 i = 0; i < whitelistTokens.length; i++) {
+            if (i < collateralsLength) {
                 aum += poolAmounts[collateralTokens.at(i)];
             } else {
-                for (uint256 j = 0; j < tradingTokens.length(); j++) {
-                    address indexToken = tradingTokens.at(j);
-                    (bool hasProfit, uint256 delta) = positionKeeper.getGlobalShortDelta(tradingTokens.at(j));
+                uint256 j = i - collateralsLength;
+                address indexToken = tradingTokens.at(j);
+                (bool hasProfit, uint256 delta) = positionKeeper.getGlobalShortDelta(tradingTokens.at(j));
 
-                    if (!hasProfit) {
-                        // Add losses from shorts
-                        aum += delta;
-                    } else {
-                        shortProfits += delta;
-                    }
-
-                    aum += guaranteedAmounts[indexToken];
-                    aum = aum + poolAmounts[indexToken] - reservedAmounts[indexToken];
+                if (!hasProfit) {
+                    // Add losses from shorts
+                    aum += delta;
+                } else {
+                    shortProfits += delta;
                 }
+
+                aum += guaranteedAmounts[indexToken];
+                aum = aum + poolAmounts[indexToken] - reservedAmounts[indexToken];
             }
         }
 
         aum = shortProfits > aum ? 0 : aum - shortProfits;
         return (aumDeduction > aum ? 0 : aum - aumDeduction) + tokenBalances.get(address(RUSD));
+    }
+
+    function getWhitelistTokens() public view returns (address[] memory) {
+        address[] memory whitelistTokens = new address[](collateralTokens.length() + tradingTokens.length());
+        uint256 count = 0;
+
+        for (uint256 i = 0; i < collateralTokens.length(); i++) {
+            whitelistTokens[count] = collateralTokens.at(i);
+            count++;
+        }
+
+        for (uint256 i = 0; i < tradingTokens.length(); i++) {
+            whitelistTokens[count] = tradingTokens.at(i);
+            count++;
+        }
+
+        return whitelistTokens;
     }
 
     function updateTotalROLP() external {
