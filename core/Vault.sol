@@ -493,7 +493,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
             } else {
                 uint256 j = i - collateralsLength;
                 address indexToken = tradingTokens.at(j);
-                (bool hasProfit, uint256 delta) = positionKeeper.getGlobalShortDelta(tradingTokens.at(j));
+                (bool hasProfit, uint256 delta) = positionKeeper.getGlobalShortDelta(indexToken);
 
                 if (!hasProfit) {
                     // Add losses from shorts
@@ -506,6 +506,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
                 aum = aum + poolAmounts[indexToken] - reservedAmounts[indexToken];
             }
         }
+
 
         aum = shortProfits > aum ? 0 : aum - shortProfits;
         return (aumDeduction > aum ? 0 : aum - aumDeduction) + tokenBalances.get(address(RUSD));

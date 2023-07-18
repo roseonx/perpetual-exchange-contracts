@@ -609,7 +609,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             _position
         );
         require(liquidationState != LIQUIDATE_NONE_EXCEED, "NLS"); //Not liquidated state
-        positionKeeper.updateGlobalShortData(_key, _position.size, _indexPrice, false);
+        positionKeeper.updateGlobalShortData(_position.size, _indexPrice, false, abi.encode(_position));
 
         if (_position.isLong) {
             vault.decreaseGuaranteedAmount(_collateralToken, _position.size - _position.collateral);
@@ -699,7 +699,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
         //Scope to avoid stack too deep error
         {
-            positionKeeper.updateGlobalShortData(_key, _sizeDelta, _indexPrice, false);
+            positionKeeper.updateGlobalShortData(_sizeDelta, _indexPrice, false, abi.encode(_position));
             prevCollateral = _position.collateral;
             (hasProfit, fundingFee, posData, _position) = _beforeDecreasePosition(
                 _sizeDelta, 
@@ -784,7 +784,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     ) internal {
         require(_sizeDelta > 0, "IVLPSD"); //Invalid position sizeDelta
         settingsManager.updateFunding(_position.indexToken, _collateralToken);
-        positionKeeper.updateGlobalShortData(_key, _sizeDelta, _indexPrice, true);
+        positionKeeper.updateGlobalShortData(_sizeDelta, _indexPrice, true, abi.encode(_position));
         uint256 fee;
 
         if (_position.size == 0) {

@@ -98,10 +98,10 @@ interface IPositionKeeper {
     ) external;
 
     function updateGlobalShortData(
-        bytes32 _key,
         uint256 _sizeDelta,
         uint256 _indexPrice,
-        bool _isIncrease
+        bool _isIncrease,
+        bytes memory _data
     ) external;
 
     //View functions

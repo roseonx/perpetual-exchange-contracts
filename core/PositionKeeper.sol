@@ -467,13 +467,13 @@ contract PositionKeeper is PositionConstants, IPositionKeeper, ReentrancyGuard, 
     }
 
     function updateGlobalShortData(
-        bytes32 _key,
         uint256 _sizeDelta,
         uint256 _indexPrice,
-        bool _isIncrease
+        bool _isIncrease,
+        bytes memory _data
     ) external {
         require(msg.sender == address(positionHandler), "Forbidden");
-        Position memory position = positions[_key];
+        Position memory position = abi.decode(_data, (Position));
 
         if (position.isLong || _sizeDelta == 0) {
             return;
@@ -518,7 +518,7 @@ contract PositionKeeper is PositionConstants, IPositionKeeper, ReentrancyGuard, 
             delta = (size * priceDelta) / averagePrice;
         }
 
-        uint256 nextAveragePrice = _getNextGlobalAveragePrice(
+        uint256 nextAveragePrice = getNextGlobalAveragePrice(
             averagePrice,
             _indexPrice,
             nextSize,
@@ -529,7 +529,7 @@ contract PositionKeeper is PositionConstants, IPositionKeeper, ReentrancyGuard, 
         return (nextSize, nextAveragePrice);
     }
 
-    function _getNextGlobalAveragePrice(
+    function getNextGlobalAveragePrice(
         uint256 _averagePrice,
         uint256 _indexPrice,
         uint256 _nextSize,
