@@ -22,7 +22,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 			encodeParams = abi.encodeParameters(["address", "uint256"], 
 				[
 					asset,
-					50
+					10
 				]);
 			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 			transaction = {
@@ -47,7 +47,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	let assetPriceMap = new Map();
 	assetPriceMap.set(contractMap.get("StableUSDC"), "1000000000000000000");
-	assetPriceMap.set(contractMap.get("TradingWETH"), "1940000000000000000000");
+	//assetPriceMap.set(contractMap.get("TradingWETH"), "1940000000000000000000");
 	// //assetPriceMap.set(contractMap.get("TradingBTC"), "30000000000000000000000");
 	// // assetPriceMap.set(contractMap.get("TradingMATIC"), "800000000000000000");
 	// // assetPriceMap.set(contractMap.get("TradingBNB"), "330000000000000000000");
@@ -55,33 +55,33 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	// // assetPriceMap.set(contractMap.get("CollateralBLUR"), "400000000000000000");
 
 	//Set latest prices
-	// try {
-	// 	functionName = "setLatestPrices";
-	// 	functionSignature = abi.encodeFunctionSignature(functionName + "(address[],uint256[])");
-	// 	encodeParams = abi.encodeParameters(["address[]","uint256[]"], 
-	// 		[
-	// 			Array.from(assetPriceMap.keys()),
-	// 			Array.from(assetPriceMap.values())
-	// 		]);
-	// 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
-	// 	transaction = {
-	// 		to: contractMap.get("PriceManager"),
-	// 		value: 0,
-	// 		gas: gasLimit,
-	// 		gasPrice: gasPrice,
-	// 		nonce: nonce,
-	// 		chainId: chainId,
-	// 		data: data
-	// 	};
-	// 	signed = await account.signTransaction(transaction);
-	// 	resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
-	// 	nonce++;
-	// 	console.log(`Signed ${functionName}`);
-	// 	console.log(signed);
-	// } catch (err) {
-	// 	//Ignored
-	// 	console.log(`Error on ${functionName} err ${err}`);
-	// }
+	try {
+		functionName = "setLatestPrices";
+		functionSignature = abi.encodeFunctionSignature(functionName + "(address[],uint256[])");
+		encodeParams = abi.encodeParameters(["address[]","uint256[]"], 
+			[
+				Array.from(assetPriceMap.keys()),
+				Array.from(assetPriceMap.values())
+			]);
+		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+		transaction = {
+			to: contractMap.get("PriceManager"),
+			value: 0,
+			gas: gasLimit,
+			gasPrice: gasPrice,
+			nonce: nonce,
+			chainId: chainId,
+			data: data
+		};
+		signed = await account.signTransaction(transaction);
+		resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+		nonce++;
+		console.log(`Signed ${functionName}`);
+		console.log(signed);
+	} catch (err) {
+		//Ignored
+		console.log(`Error on ${functionName} err ${err}`);
+	}
 
 	// //Stake 100
 	// try {
