@@ -10,7 +10,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	let rewardMap = new Map();
 	rewardMap.set(contractMap.get("ROSX"), "10000000000000000");
 	rewardMap.set(contractMap.get("EROSX"), "20000000000000000");
-	rewardMap.set(contractMap.get("USDC"), "200");
+	rewardMap.set(contractMap.get("StableUSDC"), "200");
 
 	let stakes = ["StakingDual", "StakingROLP"];
 
@@ -29,7 +29,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 			);
 			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 			transaction = {
-				to: stake,
+				to: contractMap.get(stake),
 				value: 0,
 				gas: gasLimit,
 				gasPrice: gasPrice,
@@ -38,7 +38,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 				data: data
 			};
 			signed = await account.signTransaction(transaction);
-			resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+			resMap.set(stake + "_" + nonce + "_" + functionName, signed.rawTransaction);
 			nonce++;
 			console.log(`Signed ${functionName}`);
 			console.log(signed);
@@ -78,7 +78,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	rewardMap = new Map();
 	rewardMap.set(contractMap.get("EROSX"), "20000000000000000");
-	rewardMap.set(contractMap.get("USDC"), "300");
+	rewardMap.set(contractMap.get("StableUSDC"), "300");
 	contract = "StakingROLP";
 	//
 	for (let asset of rewardMap.keys()) {
