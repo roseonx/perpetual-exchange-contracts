@@ -5,48 +5,11 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	let data = "";
 	let transaction = {};
 	let signed = {};
-	contract = "";
 
 	let rewardMap = new Map();
 	rewardMap.set(contractMap.get("ROSX"), "10000000000000000");
 	rewardMap.set(contractMap.get("EROSX"), "20000000000000000");
 	rewardMap.set(contractMap.get("StableUSDC"), "200");
-
-	let stakes = ["StakingDual", "StakingROLP"];
-
-	for (let stake of stakes) {
-		//
-		try {
-			let start = Math.floor(Date.now() / 1000);
-			let end = start + (30 * 24 * 60 * 60);
-			functionName = "create";
-			functionSignature = abi.encodeFunctionSignature(functionName + "(uint256,uint256)");
-			encodeParams = abi.encodeParameters(["uint256", "uint256"], 
-				[
-					start, 
-					end
-				]
-			);
-			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
-			transaction = {
-				to: contractMap.get(stake),
-				value: 0,
-				gas: gasLimit,
-				gasPrice: gasPrice,
-				nonce: nonce,
-				chainId: chainId,
-				data: data
-			};
-			signed = await account.signTransaction(transaction);
-			resMap.set(stake + "_" + nonce + "_" + functionName, signed.rawTransaction);
-			nonce++;
-			console.log(`Signed ${functionName}`);
-			console.log(signed);
-		} catch (err) {
-			//Ignored
-			console.log(`Error on ${functionName} ff ${stake} err ${err}`);
-		}
-	}
 
 	contract = "StakingDual";
 	//
@@ -105,6 +68,42 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 		} catch (err) {
 			//Ignored
 			console.log(`Error on ${functionName} ff ${asset} err ${err}`);
+		}
+	}
+
+	let stakes = ["StakingDual", "StakingROLP"];
+
+	for (let stake of stakes) {
+		//
+		try {
+			let start = Math.floor(Date.now() / 1000);
+			let end = start + (30 * 24 * 60 * 60);
+			functionName = "create";
+			functionSignature = abi.encodeFunctionSignature(functionName + "(uint256,uint256)");
+			encodeParams = abi.encodeParameters(["uint256", "uint256"], 
+				[
+					start, 
+					end
+				]
+			);
+			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+			transaction = {
+				to: contractMap.get(stake),
+				value: 0,
+				gas: gasLimit,
+				gasPrice: gasPrice,
+				nonce: nonce,
+				chainId: chainId,
+				data: data
+			};
+			signed = await account.signTransaction(transaction);
+			resMap.set(stake + "_" + nonce + "_" + functionName, signed.rawTransaction);
+			nonce++;
+			console.log(`Signed ${functionName}`);
+			console.log(signed);
+		} catch (err) {
+			//Ignored
+			console.log(`Error on ${functionName} ff ${stake} err ${err}`);
 		}
 	}
 
