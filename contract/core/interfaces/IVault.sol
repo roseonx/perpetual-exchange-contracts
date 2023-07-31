@@ -5,6 +5,7 @@ pragma solidity ^0.8.12;
 import {VaultBond} from "../../constants/Structs.sol";
 
 interface IVault {
+    function stakeAmounts(address _token) external view returns (uint256);
     function poolAmounts(address _token) external view returns (uint256);
     function increasePoolAmount(address _indexToken, uint256 _amount) external;
     function decreasePoolAmount(address _indexToken, uint256 _amount) external;
@@ -16,12 +17,6 @@ interface IVault {
     function guaranteedAmounts(address _token) external view returns (uint256);
     function increaseGuaranteedAmount(address _indexToken, uint256 _amount) external;
     function decreaseGuaranteedAmount(address _indexToken, uint256 _amount) external;
-
-    // function accountDeltaAndFee(
-    //     bool _hasProfit, 
-    //     uint256 _adjustDelta, 
-    //     uint256 _fee
-    // ) external;
 
     function distributeFee(
         bytes32 _key, 

@@ -32,7 +32,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
     uint256 public aumAddition;
     uint256 public aumDeduction;
-    uint256 public totalRUSD;
     address public immutable ROLP;
     address public immutable RUSD;
 
@@ -45,6 +44,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     address public router;
     address public converter;
 
+    mapping(address => uint256) public override stakeAmounts;
     mapping(address => uint256) public override poolAmounts;
     mapping(address => uint256) public override reservedAmounts;
     mapping(address => uint256) public override guaranteedAmounts;
@@ -419,7 +419,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     function transferBounty(address _account, uint256 _amount) external override hasAccess {
         if (_account != address(0) && _amount > 0) {
             IMintable(RUSD).mint(_account, _amount);
-            totalRUSD += _amount;
             emit TransferBounty(_account, _amount);
         }
     }
@@ -433,36 +432,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
             IERC20(_token).safeTransfer(_receiver, _amount);
         }
     }
-
-    // function accountDeltaAndFee(
-    //     bool _hasProfit,
-    //     uint256 _adjustDelta,
-    //     uint256 _fee
-    // ) external override hasAccess {
-    //     _accountDeltaAndFee(_hasProfit, _adjustDelta, _fee);
-    // }
-
-    // function _accountDeltaAndFee(
-    //     bool _hasProfit, 
-    //     uint256 _adjustDelta, 
-    //     uint256 _fee
-    // ) internal {
-    //     if (_adjustDelta != 0) {
-    //         uint256 feeRewardOnDelta = (_adjustDelta * settingsManager.feeRewardBasisPoints()) / BASIS_POINTS_DIVISOR;
-            
-    //         if (!_hasProfit) {
-    //             totalRUSD += feeRewardOnDelta;
-    //         } else {
-    //             require(totalRUSD >= feeRewardOnDelta, "Vault RUSD exceeded");
-    //             totalRUSD -= feeRewardOnDelta;
-    //         }
-    //     }
-
-    //     if (_fee > 0) {
-    //         uint256 splitFee = _fee * settingsManager.feeRewardBasisPoints() / BASIS_POINTS_DIVISOR;
-    //         totalRUSD += splitFee;
-    //     }
-    // }
 
     function getROLPPrice() external view returns (uint256) {
         return _getROLPPrice();
@@ -575,6 +544,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         lastStakedAt[_account] = block.timestamp;
         _increaseTokenBalances(_token, _amount);
         _increasePoolAmount(_token, usdAmountAfterFee);
+        stakeAmounts[_token] += _amount;
         emit Stake(_account, _token, _amount, mintAmount);
     }
 
@@ -600,11 +570,16 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
         require(IERC20(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
+        stakeAmounts[_tokenOut] -= amountOutInToken;
         emit Unstake(msg.sender, _tokenOut, _rolpAmount, amountOutInToken);
     }
 
     function totalROLP() public view returns (uint256) {
         return IERC20(ROLP).totalSupply();
+    }
+
+    function totalRUSD() public view returns (uint256) {
+        return IERC20(RUSD).totalSupply();
     }
 
     function distributeFee(bytes32 _key, address _account, uint256 _fee) external override {
@@ -629,7 +604,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
             if (referFee > 0) {
                 IMintable(RUSD).mint(_refer, referFee);
-                totalRUSD += referFee;
             }
         }
 
@@ -641,7 +615,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
             if (systemFee > 0) {
                 IMintable(RUSD).mint(_feeManager, systemFee);
-                totalRUSD += systemFee;
             }
         }
 
@@ -649,7 +622,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
             //Reserve fee for vault
             IMintable(RUSD).mint(address(this), _fee);
             _increaseTokenBalances(RUSD, _fee);
-            totalRUSD += _fee;
         }
     }
 
