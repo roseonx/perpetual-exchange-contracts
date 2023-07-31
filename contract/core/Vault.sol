@@ -33,7 +33,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     uint256 public aumAddition;
     uint256 public aumDeduction;
     uint256 public totalRUSD;
-    uint256 public totalROLP;
     address public immutable ROLP;
     address public immutable RUSD;
 
@@ -470,10 +469,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function _getROLPPrice() internal view returns (uint256) {
-        if (totalROLP == 0) {
+        uint256 totalRolp = totalROLP();
+
+        if (totalRolp == 0) {
             return DEFAULT_ROLP_PRICE;
         } else {
-            return (BASIS_POINTS_DIVISOR * (10 ** ROLP_DECIMALS) * _getTotalUSD()) / (totalROLP * PRICE_PRECISION);
+            return (BASIS_POINTS_DIVISOR * (10 ** ROLP_DECIMALS) * _getTotalUSD()) / (totalRolp * PRICE_PRECISION);
         }
     }
 
@@ -529,11 +530,6 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         return whitelistTokens;
     }
 
-    function updateTotalROLP() external {
-        require(_isInternal() || msg.sender == owner(), "Forbidden");
-        totalROLP = IERC20(ROLP).totalSupply();
-    }
-
     function updateBalance(address _token) external {
         require(_isInternal() || msg.sender == owner(), "Forbidden");
         tokenBalances.set(_token, IERC20(_token).balanceOf(address(this)));
@@ -563,20 +559,20 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         uint256 usdAmountFee = (usdAmount * settingsManager.stakingFee()) / BASIS_POINTS_DIVISOR;
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
         uint256 mintAmount;
+        uint256 totalRolp = totalROLP();
 
-        if (totalROLP == 0) {
+        if (totalRolp == 0) {
             mintAmount =
                 (usdAmountAfterFee * DEFAULT_ROLP_PRICE * (10 ** ROLP_DECIMALS)) /
                 (PRICE_PRECISION * BASIS_POINTS_DIVISOR);
         } else {
-            mintAmount = (usdAmountAfterFee * totalROLP) / _getTotalUSD();
+            mintAmount = (usdAmountAfterFee * totalRolp) / _getTotalUSD();
         }
 
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
         require(mintAmount > 0, "Staking amount too low");
         IMintable(ROLP).mint(_account, mintAmount);
         lastStakedAt[_account] = block.timestamp;
-        totalROLP += mintAmount;
         _increaseTokenBalances(_token, _amount);
         _increasePoolAmount(_token, usdAmountAfterFee);
         emit Stake(_account, _token, _amount, mintAmount);
@@ -584,7 +580,8 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
     function unstake(address _tokenOut, uint256 _rolpAmount, address _receiver) external nonReentrant {
         require(settingsManager.isApprovalCollateralToken(_tokenOut), "Invalid approvalToken");
-        require(_rolpAmount > 0 && _rolpAmount <= totalROLP, "Zero amount not allowed and cant exceed total ROLP");
+        uint256 totalRolp = totalROLP();
+        require(_rolpAmount > 0 && totalRolp > 0 && _rolpAmount <= totalRolp, "Zero amount not allowed and cant exceed total ROLP");
         require(
             lastStakedAt[msg.sender] + settingsManager.cooldownDuration() <= block.timestamp,
             "Cooldown duration not yet passed"
@@ -592,8 +589,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         require(settingsManager.isEnableUnstaking(), "Not enable unstaking");
 
         IMintable(ROLP).burn(msg.sender, _rolpAmount);
-        uint256 usdAmount = (_rolpAmount * _getTotalUSD()) / totalROLP;
-        totalROLP -= _rolpAmount;
+        uint256 usdAmount = (_rolpAmount * _getTotalUSD()) / totalRolp;
         uint256 usdAmountFee = (usdAmount * settingsManager.unstakingFee()) / BASIS_POINTS_DIVISOR;
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
         uint256 amountOutInToken = _tokenOut == RUSD ? usdAmount: priceManager.fromUSDToToken(_tokenOut, usdAmountAfterFee);
@@ -605,6 +601,10 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         require(IERC20(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
         emit Unstake(msg.sender, _tokenOut, _rolpAmount, amountOutInToken);
+    }
+
+    function totalROLP() public view returns (uint256) {
+        return IERC20(ROLP).totalSupply();
     }
 
     function distributeFee(bytes32 _key, address _account, uint256 _fee) external override {

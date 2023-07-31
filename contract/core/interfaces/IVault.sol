@@ -62,8 +62,6 @@ interface IVault {
 
     function totalROLP() external view returns(uint256);
 
-    function updateTotalROLP() external;
-
     function updateBalance(address _token) external;
 
     function updateBalances() external;
