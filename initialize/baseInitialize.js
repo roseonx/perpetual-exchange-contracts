@@ -215,44 +215,44 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	}
 
 	let latestPriceMap = new Map();
-	latestPriceMap.set("WETH", "0x6C6B935B8BBD400000"); //2000 * 10^18
+	latestPriceMap.set("WETH", "650C324C1AD0200000"); //1864 * 10^18
 	latestPriceMap.set("USDC", "0xDE0B6B3A7640000"); //1 * 10^18
-	latestPriceMap.set("BLUR", "0x6f05b59d3b20000"); //0.5 * 10^18
-	latestPriceMap.set("BTC", "0x3af418202d954e00000"); //17400 * 10^18
-	latestPriceMap.set("MATIC", "0xbef55718ad60000"); //0.86 * 10^18
-	latestPriceMap.set("BNB", "0x111380cf0ef80c0000");  //315 * 10^18
-	latestPriceMap.set("ARB", "0x10a741a462780000");  //1.2 * 10^18
+	latestPriceMap.set("BLUR", "0x429D069189E0000"); //0.3 * 10^18
+	latestPriceMap.set("BTC", "0x639C6F6281FC4600000"); //29400 * 10^18
+	latestPriceMap.set("MATIC", "0x9B6E64A8EC60000"); //0.7 * 10^18
+	latestPriceMap.set("BNB", "0xD2C4D6C87E3EC0000");  //243 * 10^18
+	latestPriceMap.set("ARB", "0x101925DAA3740000");  //1.16 * 10^18
 
-	// for (let asset of assets) {
-	// 	try {
-	// 		functionName = "setLatestPrice";
-	// 		functionSignature = abi.encodeFunctionSignature(functionName + "(address,uint256)");
-	// 		encodeParams = abi.encodeParameters(["address", "uint256"], 
-	// 			[
-	// 				contractMap.get(filterAssetMap.get(asset)),
-	// 				latestPriceMap.get(asset)
-	// 			]
-	// 		);
-	// 		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
-	// 		transaction = {
-	// 			to: contractMap.get("VaultPriceFeed"),
-	// 			value: 0,
-	// 			gas: gasLimit,
-	// 			gasPrice: gasPrice,
-	// 			nonce: nonce,
-	// 			chainId: chainId,
-	// 			data: data
-	// 		};
-	// 		signed = await account.signTransaction(transaction);
-	// 		resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
-	// 		nonce++;
-	// 		console.log(`Signed ${functionName}`);
-	// 		console.log(signed);
-	// 	} catch (err) {
-	// 		//Ignored
-	// 		console.log(`Error on ${functionName} err ${err}`);
-	// 	}
-	// }
+	for (let asset of assets) {
+		try {
+			functionName = "setLatestPrice";
+			functionSignature = abi.encodeFunctionSignature(functionName + "(address,uint256)");
+			encodeParams = abi.encodeParameters(["address", "uint256"], 
+				[
+					contractMap.get(filterAssetMap.get(asset)),
+					latestPriceMap.get(asset)
+				]
+			);
+			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+			transaction = {
+				to: contractMap.get("VaultPriceFeed"),
+				value: 0,
+				gas: gasLimit,
+				gasPrice: gasPrice,
+				nonce: nonce,
+				chainId: chainId,
+				data: data
+			};
+			signed = await account.signTransaction(transaction);
+			resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+			nonce++;
+			console.log(`Signed ${functionName}`);
+			console.log(signed);
+		} catch (err) {
+			//Ignored
+			console.log(`Error on ${functionName} err ${err}`);
+		}
+	}
 	
 	return {
 		resMap: resMap,

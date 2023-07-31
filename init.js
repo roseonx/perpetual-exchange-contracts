@@ -14,7 +14,7 @@ const os = require('os');
 const RPC = "https://goerli-rollup.arbitrum.io/rpc";
 const CONTRACTS_PATH = "/home/lc/Documents/SetupArbitrumContracts.txt";
 
-const PK = "XXX";
+const PK = "XNXX";
 
 let latestPriceMap = new Map();
 latestPriceMap.set("WETH", "0x6C6B935B8BBD400000"); //2000 * 10^18
@@ -41,18 +41,21 @@ async function main() {
 	let contractMap = await readContracts();
 	console.log("contractMap", contractMap);
 
+	/*
+	Should run each function instead of run all
+	*/
+
 	//Deploy and verify base
 	//await baseDeployAndVerify(contractMap);
-
-	//Deploy staking
-	//await stakingDeployAndVerify(contractMap);
 
 	//Deploy and verify main
 	//await mainDeployAndVerify(contractMap);
 
-	//Initiliaze
-	await initialize(contractMap);
+	//Deploy staking
+	//await stakingDeployAndVerify(contractMap);
 
+	//Initiliaze
+	//await initialize(contractMap);
 
 	console.log("Price_Manager".toUpperCase() + "=" + contractMap.get("PriceManager"));
 	console.log("Position_Keeper".toUpperCase() + "=" + contractMap.get("PositionKeeper"));
@@ -75,18 +78,18 @@ async function initialize(contractMap) {
 
 	nonce = await web3.eth.getTransactionCount(account.address, "latest");
 	let contractsToInitialize = [
-		// "Base",
-		// "SettingsManager",
-		// "TriggerOrderManager",
-		// "VaultUtils",
-		// "Vault",
-		// "PositionHandler",
-		// "PositionKeeper",
-		// "PositionRouter",
-		// "Extra",
-		// "Post",
-		// "CreateTestPosition",
-		//"Staking"
+		"Base",
+		"SettingsManager",
+		"TriggerOrderManager",
+		"VaultUtils",
+		"Vault",
+		"PositionHandler",
+		"PositionKeeper",
+		"PositionRouter",
+		"Extra",
+		"Post",
+		"CreateTestPosition",
+		"Staking"
 	];
 
 	let resMap = new Map();
@@ -114,7 +117,7 @@ async function initialize(contractMap) {
 			}
 		} catch (err) {
 			console.log(`broadcast with key ${key} got error ${err}`);
-			return;
+			//return;
 		}
 	}
 
@@ -130,22 +133,22 @@ async function contractInittialize(resMap, contractMap, contract, web3, abi, acc
 
 async function baseDeployAndVerify(contractMap) {
 	let contractsToDeploy = [
-		//"ROLP",
-		//"RUSD",
-		//"TradingWETH",
-		// "TradingBTC",
-		// "TradingMATIC",
-		// "TradingBNB",
-		// "TradingARB",
-		// "StableUSDC",
-		// "CollateralBLUR",
-		//"DummyChainlinkAggregator_WETH",
-		// "DummyChainlinkAggregator_BTC",
-		// "DummyChainlinkAggregator_MATIC",
-		// "DummyChainlinkAggregator_BNB",
-		// "DummyChainlinkAggregator_ARB",
-		// "DummyChainlinkAggregator_USDC",
-		// "DummyChainlinkAggregator_BLUR",
+		"ROLP",
+		"RUSD",
+		"TradingWETH",
+		"TradingBTC",
+		"TradingMATIC",
+		"TradingBNB",
+		"TradingARB",
+		"StableUSDC",
+		"CollateralBLUR",
+		"DummyChainlinkAggregator_WETH",
+		"DummyChainlinkAggregator_BTC",
+		"DummyChainlinkAggregator_MATIC",
+		"DummyChainlinkAggregator_BNB",
+		"DummyChainlinkAggregator_ARB",
+		"DummyChainlinkAggregator_USDC",
+		"DummyChainlinkAggregator_BLUR",
 		"FastPriceFeed_WETH",
 		"FastPriceFeed_BTC",
 		"FastPriceFeed_MATIC",

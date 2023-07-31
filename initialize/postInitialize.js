@@ -16,38 +16,38 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	addressConfigMap.set(contractMap.get("StableUSDC"), {decimal: 6, leverage: 10001});
 	addressConfigMap.set(contractMap.get("CollateralBLUR"), {decimal: 18, leverage: 10001});
 
-	// for (let address of addressConfigMap.keys()) {
-	// 	try {
-	// 		functionName = "setTokenConfig";
-	// 		functionSignature = abi.encodeFunctionSignature(functionName + "(address,uint256,uint256,bool)");
-	// 		encodeParams = abi.encodeParameters(["address", "uint256", "uint256", "bool"], 
-	// 			[
-	// 				address,
-	// 				addressConfigMap.get(address).decimal,
-	// 				addressConfigMap.get(address).leverage,
-	// 				false
-	// 			]
-	// 		);
-	// 		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
-	// 		transaction = {
-	// 			to: contractMap.get("PriceManager"),
-	// 			value: 0,
-	// 			gas: gasLimit,
-	// 			gasPrice: gasPrice,
-	// 			nonce: nonce,
-	// 			chainId: chainId,
-	// 			data: data
-	// 		};
-	// 		signed = await account.signTransaction(transaction);
-	// 		resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
-	// 		nonce++;
-	// 		console.log(`Signed ${functionName}`);
-	// 		console.log(signed);
-	// 	} catch (err) {
-	// 		//Ignored
-	// 		console.log(`Error on ${functionName} err ${err}`);
-	// 	}
-	// }
+	for (let address of addressConfigMap.keys()) {
+		try {
+			functionName = "setTokenConfig";
+			functionSignature = abi.encodeFunctionSignature(functionName + "(address,uint256,uint256,bool)");
+			encodeParams = abi.encodeParameters(["address", "uint256", "uint256", "bool"], 
+				[
+					address,
+					addressConfigMap.get(address).decimal,
+					addressConfigMap.get(address).leverage,
+					false
+				]
+			);
+			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+			transaction = {
+				to: contractMap.get("PriceManager"),
+				value: 0,
+				gas: gasLimit,
+				gasPrice: gasPrice,
+				nonce: nonce,
+				chainId: chainId,
+				data: data
+			};
+			signed = await account.signTransaction(transaction);
+			resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+			nonce++;
+			console.log(`Signed ${functionName}`);
+			console.log(signed);
+		} catch (err) {
+			//Ignored
+			console.log(`Error on ${functionName} err ${err}`);
+		}
+	}
 
 	//Grant access
 	let addressMap = new Map();
