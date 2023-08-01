@@ -479,7 +479,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
 
         aum = shortProfits > aum ? 0 : aum - shortProfits;
-        return (aumDeduction > aum ? 0 : aum - aumDeduction) + tokenBalances.get(address(RUSD));
+        return (aumDeduction > aum ? 0 : aum - aumDeduction) + _tryGet(tokenBalances, RUSD);
     }
 
     function getWhitelistTokens() public view returns (address[] memory) {
