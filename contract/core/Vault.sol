@@ -544,7 +544,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         lastStakedAt[_account] = block.timestamp;
         _increaseTokenBalances(_token, _amount);
         _increasePoolAmount(_token, usdAmountAfterFee);
-        stakeAmounts[_token] += _amount;
+        stakeAmounts[_token] += usdAmountAfterFee;
         emit Stake(_account, _token, _amount, mintAmount);
     }
 
@@ -570,7 +570,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
         require(IERC20(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
-        stakeAmounts[_tokenOut] -= amountOutInToken;
+        stakeAmounts[_tokenOut] -= usdAmountAfterFee;
         emit Unstake(msg.sender, _tokenOut, _rolpAmount, amountOutInToken);
     }
 
