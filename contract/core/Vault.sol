@@ -529,13 +529,14 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
         uint256 mintAmount;
         uint256 totalRolp = totalROLP();
+        uint256 totalUsd = _getTotalUSD();
 
-        if (totalRolp == 0) {
+        if (totalRolp == 0 || totalUsd == 0) {
             mintAmount =
                 (usdAmountAfterFee * DEFAULT_ROLP_PRICE * (10 ** ROLP_DECIMALS)) /
                 (PRICE_PRECISION * BASIS_POINTS_DIVISOR);
         } else {
-            mintAmount = (usdAmountAfterFee * totalRolp) / _getTotalUSD();
+            mintAmount = (usdAmountAfterFee * totalRolp) / totalUsd;
         }
 
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
@@ -562,7 +563,8 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         uint256 usdAmount = (_rolpAmount * _getTotalUSD()) / totalRolp;
         uint256 usdAmountFee = (usdAmount * settingsManager.unstakingFee()) / BASIS_POINTS_DIVISOR;
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
-        uint256 amountOutInToken = _tokenOut == RUSD ? usdAmount: priceManager.fromUSDToToken(_tokenOut, usdAmountAfterFee);
+        uint256 amountOutInToken = usdAmountAfterFee == 0 ? 0 
+            : (_tokenOut == RUSD ? usdAmountAfterFee: priceManager.fromUSDToToken(_tokenOut, usdAmountAfterFee));
         require(amountOutInToken > 0, "Unstaking amount too low");
 
         _decreaseTokenBalances(_tokenOut, amountOutInToken);
