@@ -109,6 +109,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     event SetPositionRouter(address positionRouter);
     event SetSwapRouter(address swapRouter);
     event SetConverter(address converter);
+    event SetVaultUtils(address vaultUtils);
     event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
     event ConvertRUSD(address indexed recipient, address indexed token, uint256 amountIn, uint256 amountOut);
     event SetRefferalSystem(address referralSystem);
@@ -140,6 +141,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     function setSwapRouter(address _swapRouter) external onlyOwner {
         require(Address.isContract(_swapRouter), "Invalid swapRouter");
         swapRouter = _swapRouter;
+    }
+
+    function setVaultUtils(address _vaultUtils) external onlyOwner {
+        require(Address.isContract(_vaultUtils), "Invalid vaultUtils");
+        vaultUtils = _vaultUtils;
+        emit SetVaultUtils(_vaultUtils);
     }
 
     function setConverter(address _converter) external onlyOwner {
