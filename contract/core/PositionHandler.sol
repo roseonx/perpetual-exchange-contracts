@@ -382,8 +382,8 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         uint256[] memory _prices,
         Position memory _position
     ) internal {
+        uint256 prevCollateral = _position.collateral;
         uint256 amountInUSD;
-
         (amountInUSD, _position) = vaultUtils.validateAddOrRemoveCollateral(
             _amountIn,
             _txType == ADD_COLLATERAL ? true : false,
@@ -397,6 +397,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
         if (_txType == ADD_COLLATERAL) {
             vault.increasePoolAmount(_getLastPath(_path), amountInUSD);
+            vault.decreaseGuaranteedAmount(_getLastPath(_path), _position.collateral - prevCollateral);
         } else {
             vault.takeAssetOut(
                 _key,
@@ -408,6 +409,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
             );
 
             vault.decreasePoolAmount(_getLastPath(_path), _amountIn);
+            vault.increaseGuaranteedAmount(_getLastPath(_path), prevCollateral - _position.collateral);
         }
 
         positionKeeper.emitAddOrRemoveCollateralEvent(

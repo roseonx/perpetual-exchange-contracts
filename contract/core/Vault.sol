@@ -41,8 +41,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     ISettingsManager public settingsManager;
     IReferralSystem public referralSystem;
     address public swapRouter;
-    address public router;
+    address public positionRouter;
     address public converter;
+    address public vaultUtils;
 
     mapping(address => uint256) public override stakeAmounts;
     mapping(address => uint256) public override poolAmounts;
@@ -105,17 +106,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     event Unstake(address indexed account, address token, uint256 rolpAmount, uint256 amountOut);
     event SetPositionKeeper(address positionKeeper);
     event SetPositionHandler(address positionHandler);
-    event SetRouter(address router);
+    event SetPositionRouter(address positionRouter);
     event SetSwapRouter(address swapRouter);
     event SetConverter(address converter);
     event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
     event ConvertRUSD(address indexed recipient, address indexed token, uint256 amountIn, uint256 amountOut);
     event SetRefferalSystem(address referralSystem);
-
-    modifier hasAccess() {
-        require(_isInternal(), "Forbidden");
-        _;
-    }
 
     constructor(address _ROLP, address _RUSD) {
         ROLP = _ROLP;
@@ -124,9 +120,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
     //Config functions
     function setPositionRouter(address _router) external onlyOwner {
-        require(Address.isContract(_router), "Invalid router");
-        router = _router;
-        emit SetRouter(_router);
+        require(Address.isContract(_router), "Invalid positionRouter");
+        positionRouter = _router;
+        emit SetPositionRouter(_router);
     }
 
     function setPositionKeeper(address _positionKeeper) external onlyOwner {
@@ -270,12 +266,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function increaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isPositionHandler(msg.sender, true);
+        require(_isPositionHandler(msg.sender, false) || _isVaultUtils(msg.sender, false), "FBD");
         _updateGuaranteedAmount(_token, _amount, true);
     }
 
     function decreaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isPositionHandler(msg.sender, true);
+        require(_isPositionHandler(msg.sender, false) || _isVaultUtils(msg.sender, false), "FBD");
         _updateGuaranteedAmount(_token, _amount, false);
     }
 
@@ -297,7 +293,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         bytes32 _key,
         uint256 _txType
     ) external override {
-        require(msg.sender == router || msg.sender == address(swapRouter), "Forbidden: Not routers");
+        require(msg.sender == positionRouter || msg.sender == address(swapRouter), "Forbidden: Not routers");
         require(_amount > 0 && _token != address(0), "Invalid amount or token");
         settingsManager.isApprovalCollateralToken(_token, true);
 
@@ -416,7 +412,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         }
     }
 
-    function transferBounty(address _account, uint256 _amount) external override hasAccess {
+    function transferBounty(address _account, uint256 _amount) external override {
+        require(_isInternal(), "FBD");
+
         if (_account != address(0) && _amount > 0) {
             IMintable(RUSD).mint(_account, _amount);
             emit TransferBounty(_account, _amount);
@@ -715,20 +713,19 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function _isInternal() internal view returns (bool) {
-        return _isRouter(msg.sender, false) || _isPositionHandler(msg.sender, false) 
-            || _isSwapRouter(msg.sender, false);
+        return _isPosition() || _isSwapRouter(msg.sender, false);
     }
 
     function _isPosition() internal view returns (bool) {
         return _isPositionHandler(msg.sender, false) 
-            || _isRouter(msg.sender, false);
+            || _isPositionRouter(msg.sender, false);
     }
 
-    function _isRouter(address _caller, bool _raise) internal view returns (bool) {
-        bool res = _caller == address(router);
+    function _isPositionRouter(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == address(positionRouter);
 
         if (_raise && !res) {
-            revert("Forbidden: Not router");
+            revert("Forbidden: Not positionRouter");
         }
 
         return res;
@@ -749,6 +746,16 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
         if (_raise && !res) {
             revert("Forbidden: Not swapRouter");
+        }
+
+        return res;
+    }
+
+    function _isVaultUtils(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == vaultUtils;
+
+        if (_raise && !res) {
+            revert("Forbidden: Not vaultUtils");
         }
 
         return res;
