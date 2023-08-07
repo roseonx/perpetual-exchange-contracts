@@ -47,6 +47,26 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	console.log(signed);
 
 	//
+	functionName = "setVaultUtils";
+	functionSignature = abi.encodeFunctionSignature(functionName + "(address)");
+	encodeParams = abi.encodeParameters(["address"], [contractMap.get("VaultUtils")]);
+	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+	transaction = {
+		to: contractMap.get(contract),
+		value: 0,
+		gas: gasLimit,
+		gasPrice: gasPrice,
+		nonce: nonce,
+		chainId: chainId,
+		data: data
+	};
+	signed = await account.signTransaction(transaction);
+	resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+	nonce++;
+	console.log(`Signed ${functionName}`);
+	console.log(signed);
+
+	//
 	functionName = "setPositionRouter";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(address)");
 	encodeParams = abi.encodeParameters(["address"], [contractMap.get("PositionRouter")]);
