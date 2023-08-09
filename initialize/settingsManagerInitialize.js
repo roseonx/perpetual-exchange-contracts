@@ -128,7 +128,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	//
 	functionName = "setMaxOpenInterestPerUser";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(uint256)");
-	encodeParams = abi.encodeParameters(["uint256"], ["400000000000000000000000"]); //400_000 * 10**18
+	encodeParams = abi.encodeParameters(["uint256"], ["500000000000000000000000"]); //500_000 * 10**18
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),
@@ -150,7 +150,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	for (let b of bools) {
 		functionName = "setMaxOpenInterestPerSide";
 		functionSignature = abi.encodeFunctionSignature(functionName + "(bool,uint256)");
-		encodeParams = abi.encodeParameters(["bool", "uint256"], [b, "4000000000000000000000000"]); //4_000_000 * 10**18
+		encodeParams = abi.encodeParameters(["bool", "uint256"], [b, "50000000000000000000000000"]); //50_000_000 * 10**18
 		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 		transaction = {
 			to: contractMap.get(contract),
@@ -258,7 +258,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 			//
 			functionName = "setMaxOpenInterestPerAssetPerSide";
 			functionSignature = abi.encodeFunctionSignature(functionName + "(address,bool,uint256)");
-			encodeParams = abi.encodeParameters(["address", "bool", "uint256"], [asset, b, "500000000000000000000000"]); //500_000 * 10**18
+			encodeParams = abi.encodeParameters(["address", "bool", "uint256"], [asset, b, "5000000000000000000000000"]); //5_00_000 * 10**18
 			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 			transaction = {
 				to: contractMap.get(contract),
@@ -320,7 +320,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	//
 	functionName = "setMaxPriceUpdatedDelay";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(uint256)");
-	encodeParams = abi.encodeParameters(["uint256"], [300]); //5 mins
+	encodeParams = abi.encodeParameters(["uint256"], [120]); //2 mins
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),
@@ -340,7 +340,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	//
 	functionName = "setVaultSettings";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(uint256,uint256)");
-	encodeParams = abi.encodeParameters(["uint256", "uint256"], [0, 50000]);
+	encodeParams = abi.encodeParameters(["uint256", "uint256"], [604800, 50000]); //604800 = 7 days
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),
@@ -461,6 +461,46 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	functionName = "setVault";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(address)");
 	encodeParams = abi.encodeParameters(["address"], [contractMap.get("Vault")]);
+	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+	transaction = {
+		to: contractMap.get(contract),
+		value: 0,
+		gas: gasLimit,
+		gasPrice: gasPrice,
+		nonce: nonce,
+		chainId: chainId,
+		data: data
+	};
+	signed = await account.signTransaction(transaction);
+	resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+	nonce++;
+	console.log(`Signed ${functionName}`);
+	console.log(signed);
+
+	//setStakingFee
+	functionName = "setStakingFee";
+	functionSignature = abi.encodeFunctionSignature(functionName + "(uint256)");
+	encodeParams = abi.encodeParameters(["uint256"], [300]);
+	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+	transaction = {
+		to: contractMap.get(contract),
+		value: 0,
+		gas: gasLimit,
+		gasPrice: gasPrice,
+		nonce: nonce,
+		chainId: chainId,
+		data: data
+	};
+	signed = await account.signTransaction(transaction);
+	resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+	nonce++;
+	console.log(`Signed ${functionName}`);
+	console.log(signed);
+
+	//setUnstakingFee
+	functionName = "setUnstakingFee";
+	functionSignature = abi.encodeFunctionSignature(functionName + "(uint256)");
+	encodeParams = abi.encodeParameters(["uint256"], [300]);
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),

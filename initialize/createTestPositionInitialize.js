@@ -83,35 +83,35 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 		console.log(`Error on ${functionName} err ${err}`);
 	}
 
-	// //Stake 100
-	// try {
-	// 	functionName = "stake";
-	// 	functionSignature = abi.encodeFunctionSignature(functionName + "(address,address,uint256)");
-	// 	encodeParams = abi.encodeParameters(["address", "address", "uint256"], 
-	// 		[
-	// 			account.address, 
-	// 			contractMap.get("StableUSDC"),
-	// 			10000000
-	// 		]);
-	// 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
-	// 	transaction = {
-	// 		to: contractMap.get("Vault"),
-	// 		value: 0,
-	// 		gas: gasLimit,
-	// 		gasPrice: gasPrice,
-	// 		nonce: nonce,
-	// 		chainId: chainId,
-	// 		data: data
-	// 	};
-	// 	signed = await account.signTransaction(transaction);
-	// 	resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
-	// 	nonce++;
-	// 	console.log(`Signed ${functionName}`);
-	// 	console.log(signed);
-	// } catch (err) {
-	// 	//Ignored
-	// 	console.log(`Error on ${functionName} err ${err}`);
-	// }
+	//Stake 100
+	try {
+		functionName = "stake";
+		functionSignature = abi.encodeFunctionSignature(functionName + "(address,address,uint256)");
+		encodeParams = abi.encodeParameters(["address", "address", "uint256"], 
+			[
+				account.address, 
+				contractMap.get("StableUSDC"),
+				10000000
+			]);
+		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+		transaction = {
+			to: contractMap.get("Vault"),
+			value: 0,
+			gas: gasLimit,
+			gasPrice: gasPrice,
+			nonce: nonce,
+			chainId: chainId,
+			data: data
+		};
+		signed = await account.signTransaction(transaction);
+		resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+		nonce++;
+		console.log(`Signed ${functionName}`);
+		console.log(signed);
+	} catch (err) {
+		//Ignored
+		console.log(`Error on ${functionName} err ${err}`);
+	}
 
 	let openAssetMap = new Map();
 

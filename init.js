@@ -14,7 +14,7 @@ const os = require('os');
 const RPC = "https://goerli-rollup.arbitrum.io/rpc";
 const CONTRACTS_PATH = "/home/lc/Documents/SetupArbitrumContracts.txt";
 
-const PK = "XNXX";
+const PK = "xXx";
 
 let latestPriceMap = new Map();
 latestPriceMap.set("WETH", "0x6C6B935B8BBD400000"); //2000 * 10^18
@@ -61,8 +61,9 @@ async function main() {
 	console.log("Position_Keeper".toUpperCase() + "=" + contractMap.get("PositionKeeper"));
 	console.log("Position_Handler".toUpperCase() + "=" + contractMap.get("PositionHandler"));
 	console.log("Trigger_Order".toUpperCase() + "=" + contractMap.get("TriggerOrderManager"));
-	console.log("Execute_Contract".toUpperCase() + "=" + contractMap.get("PositionRouter"))
-	console.log("Vault_Utils".toUpperCase() + "=" + contractMap.get("VaultUtils"))
+	console.log("Execute_Contract".toUpperCase() + "=" + contractMap.get("PositionRouter"));
+	console.log("Vault_Utils".toUpperCase() + "=" + contractMap.get("VaultUtils"));
+	console.log("SETTING_MANAGER".toUpperCase() + "=" + contractMap.get("SettingsManager"));
 }
 
 async function initialize(contractMap) {
@@ -362,3 +363,4 @@ async function readContracts() {
 
 	return contractMap;
 }
+

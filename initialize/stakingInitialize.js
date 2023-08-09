@@ -77,7 +77,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 		//
 		try {
 			let start = Math.floor(Date.now() / 1000);
-			let end = start + (30 * 24 * 60 * 60);
+			let end = start + (30 * 24 * 60 * 60); //Duration in 30 days
 			functionName = "create";
 			functionSignature = abi.encodeFunctionSignature(functionName + "(uint256,uint256)");
 			encodeParams = abi.encodeParameters(["uint256", "uint256"], 
@@ -419,6 +419,35 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 		transaction = {
 			to: contractMap.get(contract),
+			value: 0,
+			gas: gasLimit,
+			gasPrice: gasPrice,
+			nonce: nonce,
+			chainId: chainId,
+			data: data
+		};
+		signed = await account.signTransaction(transaction);
+		resMap.set(contract + "_" + nonce + "_" + functionName, signed.rawTransaction);
+		nonce++;
+		console.log(`Signed ${functionName}`);
+		console.log(signed);
+	} catch (err) {
+		//Ignored
+		console.log(`Error on ${functionName} ff ${asset} err ${err}`);
+	}
+
+	//setVestingDuration
+	try {
+		functionName = "setVestingDuration";
+		functionSignature = abi.encodeFunctionSignature(functionName + "(uint256)");
+		encodeParams = abi.encodeParameters(["uint256"], 
+			[
+				"2592000"
+			]
+		);
+		data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
+		transaction = {
+			to: contractMap.get("VestERosx"),
 			value: 0,
 			gas: gasLimit,
 			gasPrice: gasPrice,
