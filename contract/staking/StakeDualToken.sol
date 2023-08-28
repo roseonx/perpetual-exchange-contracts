@@ -6,13 +6,14 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface ITracker {
     function burn(address _addr, uint256 _amount) external ;
     function mint(address _addr, uint256 _amount) external ;
 }
 
-contract StakingDual is Ownable {
+contract StakingDual is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -147,13 +148,13 @@ contract StakingDual is Ownable {
         return (((user.amountRosx.add(user.amountERosx).add(user.point)).mul(accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt).add(pendingReward.rewardPending));
     }
 
-    function compound(bool[] calldata _isClaim , bool[] calldata _isCompound) external {
+    function compound(bool[] calldata _isClaim , bool[] calldata _isCompound) external nonReentrant {
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
         uint256 amountRosxBf = user.amountRosx;
         uint256 amountERosxBf = user.amountERosx;
         updatePool();
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountRosxBf.add(amountERosxBf).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(addrStake[address(rewardInfo[i].rwToken)] == 1 || addrStake[address(rewardInfo[i].rwToken)] == 2 ) {
@@ -188,7 +189,7 @@ contract StakingDual is Ownable {
             }
         }
 
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
@@ -265,12 +266,12 @@ contract StakingDual is Ownable {
      * @param __index: index of pool 1: 
      * @param _amount: amount to deposit
      */
-    function deposit(uint256 _amount, uint256 _index) external  {
+    function deposit(uint256 _amount, uint256 _index) external nonReentrant {
         require(_amount > 0, "deposit: amount > 0");
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
        
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -304,7 +305,7 @@ contract StakingDual is Ownable {
         UserInfo storage user = userInfo[addr];
         updatePool();
        
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[addr][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -330,7 +331,7 @@ contract StakingDual is Ownable {
      * @notice Withdraw staked tokens and collect reward tokens
      * @param _amount: amount to withdraw
      */
-    function withdraw(uint256 _amount, uint256 _index) public {
+    function withdraw(uint256 _amount, uint256 _index) public nonReentrant {
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
         require(_amount > 0, "withdraw: amount > 0");
@@ -341,7 +342,7 @@ contract StakingDual is Ownable {
         }
 
         updatePool();
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -364,10 +365,10 @@ contract StakingDual is Ownable {
         }
     }
 
-    function claim(bool[] calldata _isClaim) external {
+    function claim(bool[] calldata _isClaim) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if(_isClaim[i]) {
@@ -495,9 +496,10 @@ contract StakingDual is Ownable {
      * @dev Only callable by owner. Needs to be for emergency.
      */
     function emergencyRewardWithdraw(uint256[] calldata _amount) external onlyOwner {
-        for(uint i=0; i<_amount.length; i++) {
+        for (uint i = 0; i < _amount.length; i++) {
             rewardInfo[i].rwToken.transfer(address(msg.sender), _amount[i]);
         }
+
         emit EmergencyRewardWithdraw(msg.sender, _amount);
     }
 
@@ -522,7 +524,7 @@ contract StakingDual is Ownable {
         user.amountRosx = user.lock;
         user.amountERosx = 0;
         user.point = 0;
-        for(uint i=0; i<rewardInfo.length; i++) {
+        for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;
