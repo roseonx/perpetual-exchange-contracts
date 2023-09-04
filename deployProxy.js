@@ -127,13 +127,13 @@ async function initialize(contractMap, contracts, web3, account, nonce, chainId)
 
 	for (let key of resMap.keys()) {
 		try {
-			const broadcastResult = await web3.eth.sendSignedTransaction(resMap.get(key), 
-			{
-				checkRevertBeforeSending: false,
-				options: {
-					checkRevertBeforeSending: false
+			const broadcastResult = await web3.eth.sendSignedTransaction(
+				resMap.get(key),
+				"hex",
+				{
+					checkRevertBeforeSending: true //false
 				}
-			});
+			);
 			console.log("key", key);
 			console.log("broadcastResult", broadcastResult);
 
