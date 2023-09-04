@@ -1,0 +1,360 @@
+{
+	"deploy": {
+		"VM:-": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"main:1": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"ropsten:3": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"rinkeby:4": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"kovan:42": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"goerli:5": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		},
+		"Custom": {
+			"linkReferences": {},
+			"autoDeployLib": true
+		}
+	},
+	"data": {
+		"bytecode": {
+			"functionDebugData": {},
+			"generatedSources": [],
+			"linkReferences": {},
+			"object": "",
+			"opcodes": "",
+			"sourceMap": ""
+		},
+		"deployedBytecode": {
+			"functionDebugData": {},
+			"generatedSources": [],
+			"immutableReferences": {},
+			"linkReferences": {},
+			"object": "",
+			"opcodes": "",
+			"sourceMap": ""
+		},
+		"gasEstimates": null,
+		"methodIdentifiers": {
+			"fromTokenToUSD(address,uint256)": "54efd4be",
+			"fromUSDToToken(address,uint256)": "5bb0e89d",
+			"getDelta(address,uint256,uint256,bool,uint256)": "5c07eaab",
+			"getLastPrice(address)": "c692fc74",
+			"getLatestSynchronizedPrice(address)": "480b4dbb",
+			"getLatestSynchronizedPrices(uint256,address[])": "3fd65778",
+			"getNextAveragePrice(address,uint256,uint256,bool,uint256,uint256,uint256)": "db97495f",
+			"isForex(address)": "3fd5f826",
+			"maxLeverage(address)": "c0386611",
+			"setLatestPrice(address,uint256)": "c0571c44",
+			"tokenDecimals(address)": "8ee573ac"
+		}
+	},
+	"abi": [
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_tokenAmount",
+					"type": "uint256"
+				}
+			],
+			"name": "fromTokenToUSD",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_usdAmount",
+					"type": "uint256"
+				}
+			],
+			"name": "fromUSDToToken",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_indexToken",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_size",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_averagePrice",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bool",
+					"name": "_isLong",
+					"type": "bool"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_indexPrice",
+					"type": "uint256"
+				}
+			],
+			"name": "getDelta",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				},
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				}
+			],
+			"name": "getLastPrice",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				}
+			],
+			"name": "getLatestSynchronizedPrice",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_maxDelayAllowance",
+					"type": "uint256"
+				},
+				{
+					"internalType": "address[]",
+					"name": "_tokens",
+					"type": "address[]"
+				}
+			],
+			"name": "getLatestSynchronizedPrices",
+			"outputs": [
+				{
+					"internalType": "uint256[]",
+					"name": "",
+					"type": "uint256[]"
+				},
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_indexToken",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_size",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_averagePrice",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bool",
+					"name": "_isLong",
+					"type": "bool"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_nextPrice",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_sizeDelta",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_indexPrice",
+					"type": "uint256"
+				}
+			],
+			"name": "getNextAveragePrice",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				}
+			],
+			"name": "isForex",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				}
+			],
+			"name": "maxLeverage",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_latestPrice",
+					"type": "uint256"
+				}
+			],
+			"name": "setLatestPrice",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_token",
+					"type": "address"
+				}
+			],
+			"name": "tokenDecimals",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		}
+	]
+}
