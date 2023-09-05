@@ -36,6 +36,16 @@ async function main() {
 	//Deploy and verify
 	// await deploy(contractMap, contracts);
 	// await verify(contractMap, contracts);
+
+	//Upgrade
+	let upgradeMap = new Map();
+	//upgradeMap.set("PositionHandler", "PositionHandlerV2_1");
+	//upgradeMap.set("PositionKeeper", "PositionKeeperV2_1");
+	
+
+	for (let contractName of upgradeMap.keys()) {
+		await upgrade(contractMap, contractName, upgradeMap.get(contractName));
+	}
 	
 	//Initialize
 	//await initialize(contractMap, contracts, web3, account, nonce, chainId);
@@ -147,6 +157,39 @@ async function initialize(contractMap, contracts, web3, account, nonce, chainId)
 	}
 
 	console.log("broadcastResultSuccessCount == resMap.size", broadcastResultSuccessCount === resMap.size);
+}
+
+async function upgrade(contractMap, contractName, newImplContractName) {
+	const proxy = contractMap.get(contractName);
+	console.log(`Prepare to upgrade ${contractName} (${proxy})...`);
+	const Contract = await ethers.getContractFactory(newImplContractName, {kind: "uups"});
+	const contract = await upgrades.upgradeProxy(contractMap.get(contractName), Contract,
+		{
+			// call: {
+			// 	fn: "initialize",
+			// 	args: [
+			// 		contractMap.get("PriceManager"),			
+			// 		contractMap.get("SettingsManager")
+			// 	]
+			// },
+			kind: "uups"
+		}
+	);
+
+	// const contract = await upgrades.forceImport(contractMap.get(contractName), Contract,
+	// 	{
+	// 		// call: {
+	// 		// 	// fn: "initialize",
+	// 		// 	// args: [
+	// 		// 	// 	contractMap.get("RUSD")
+	// 		// 	// ]
+	// 		// },
+	// 		kind: "uups"
+	// 	}
+	// );
+
+	console.log(`Contract ${contractName} upgraded`);
+	await verify(contractMap, [contractName]);
 }
 
 

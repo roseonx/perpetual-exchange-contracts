@@ -116,7 +116,7 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
     function initialize(
         address _priceManager,
         address _positionHandler
-    ) public initializer {
+    ) public reinitializer(1) {
         __Ownable_init();
         _finalInitialize(
             _priceManager,
@@ -152,7 +152,16 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
 
         //Scope to avoid stack too deep error
         {
-            (positions[_key], orders[_key]) = abi.decode(_data, ((Position), (OrderInfo)));
+            //Min encode data length for position 13 struct and order 9 struct are 22 * 32 = 704
+
+            if (_data.length < 704) {
+                //For market position, already storaged position by unpackAndStorage from PositionHandler._increasePosition
+                orders[_key] = abi.decode(_data, (OrderInfo));
+            } else {
+                //Storage position and order for delay position
+                (positions[_key], orders[_key]) = abi.decode(_data, ((Position), (OrderInfo)));
+            }
+
             position = positions[_key];
             order = orders[_key];
         }

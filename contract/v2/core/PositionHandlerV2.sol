@@ -23,7 +23,7 @@ import "./interfaces/IVaultUtilsV2.sol";
 import {PositionConstants} from "../../constants/PositionConstants.sol";
 import {Position, OrderInfo, OrderStatus, OrderType, DataType} from "../../constants/Structs.sol";
 
-contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecutorV2, 
+contract PositionHandlerV2_1 is PositionConstants, IPositionHandlerV2, BaseExecutorV2, 
         UUPSUpgradeable, ReentrancyGuardUpgradeable {
     mapping(bytes32 => bool) private processing;
 
@@ -56,7 +56,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
     function initialize(
         address _priceManager,
         address _settingsManager
-    ) public initializer {
+    ) public reinitializer(1) {
         require(AddressUpgradeable.isContract(_priceManager)
             && AddressUpgradeable.isContract(_settingsManager), "IVLCA");
         super.initialize();
@@ -110,12 +110,12 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         }
 
         address account;
-        
-        bool isDelayPosition = false;
+        bool isFastExecute;
         uint256 delayPositionTxType;
 
         if (_isOpenPosition(_txType)) {
-            account = _openNewPosition(
+            //bool isFastExecute;
+            (account, isFastExecute) = _openNewPosition(
                 _key,
                 _path,
                 _prices,
@@ -170,8 +170,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             );
         } else if (_txType == TRIGGER_POSITION) {
             (Position memory position, OrderInfo memory order) = abi.decode(_data, ((Position), (OrderInfo)));
-            isDelayPosition = position.size == 0;
-            delayPositionTxType = isDelayPosition ? _getTxTypeFromPositionType(order.positionType) : 0;
+            delayPositionTxType = position.size == 0 ? _getTxTypeFromPositionType(order.positionType) : 0;
             account = position.owner;
             _triggerPosition(
                 _key,
@@ -224,11 +223,11 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         }
 
         //Reduce vault bond
-        bool isTriggerDelayPosition = _txType == TRIGGER_POSITION && isDelayPosition;
 
-        if (_txType == ADD_COLLATERAL ||  _txType == ADD_POSITION || isTriggerDelayPosition) {
-            uint256 exactTxType = isTriggerDelayPosition && delayPositionTxType > 0 ? delayPositionTxType : _txType;
-            vault.decreaseBond(_key, account, exactTxType);
+        if (_txType == ADD_COLLATERAL || _txType == ADD_POSITION 
+                || (_txType == TRIGGER_POSITION && delayPositionTxType > 0)
+                || (_txType == CREATE_POSITION_MARKET && isFastExecute)) {
+            vault.decreaseBond(_key, account, delayPositionTxType > 0 ? delayPositionTxType : _txType);
         }
     }
 
@@ -237,7 +236,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         address[] memory _path,
         uint256[] memory _prices, 
         bytes memory _data
-    ) internal returns (address) {
+    ) internal returns (address, bool) {
         bool isFastExecute;
         bool isNewPosition;
         uint256[] memory params;
@@ -253,7 +252,9 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             true
         );
         
-        if (order.positionType == POSITION_MARKET && isFastExecute) {
+        bool isFastMarketExecute = order.positionType == POSITION_MARKET && isFastExecute;
+
+        if (isFastMarketExecute) {
             _increaseMarketPosition(
                 _key,
                 _path,
@@ -261,7 +262,6 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
                 position,
                 order
             );
-            vault.decreaseBond(_key, position.owner, CREATE_POSITION_MARKET);
         }
 
         if (isNewPosition) {
@@ -271,13 +271,11 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
                 position.posId,
                 _path,
                 params, 
-                abi.encode(position, order)
+                isFastMarketExecute ? abi.encode(order) : abi.encode(position, order)
             );
-        } else {
-            positionKeeper.unpackAndStorage(_key, abi.encode(position), DataType.POSITION);
         }
 
-        return position.owner;
+        return (position.owner, isFastExecute);
     }
 
     function _increaseMarketPosition(
