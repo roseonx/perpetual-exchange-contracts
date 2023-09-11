@@ -41,8 +41,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     ISettingsManager public settingsManager;
     IReferralSystem public referralSystem;
     address public swapRouter;
-    address public router;
+    address public positionRouter;
     address public converter;
+    address public vaultUtils;
 
     mapping(address => uint256) public override stakeAmounts;
     mapping(address => uint256) public override poolAmounts;
@@ -105,17 +106,13 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     event Unstake(address indexed account, address token, uint256 rolpAmount, uint256 amountOut);
     event SetPositionKeeper(address positionKeeper);
     event SetPositionHandler(address positionHandler);
-    event SetRouter(address router);
+    event SetPositionRouter(address positionRouter);
     event SetSwapRouter(address swapRouter);
     event SetConverter(address converter);
+    event SetVaultUtils(address vaultUtils);
     event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
     event ConvertRUSD(address indexed recipient, address indexed token, uint256 amountIn, uint256 amountOut);
     event SetRefferalSystem(address referralSystem);
-
-    modifier hasAccess() {
-        require(_isInternal(), "Forbidden");
-        _;
-    }
 
     constructor(address _ROLP, address _RUSD) {
         ROLP = _ROLP;
@@ -124,9 +121,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
     //Config functions
     function setPositionRouter(address _router) external onlyOwner {
-        require(Address.isContract(_router), "Invalid router");
-        router = _router;
-        emit SetRouter(_router);
+        require(Address.isContract(_router), "Invalid positionRouter");
+        positionRouter = _router;
+        emit SetPositionRouter(_router);
     }
 
     function setPositionKeeper(address _positionKeeper) external onlyOwner {
@@ -144,6 +141,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     function setSwapRouter(address _swapRouter) external onlyOwner {
         require(Address.isContract(_swapRouter), "Invalid swapRouter");
         swapRouter = _swapRouter;
+    }
+
+    function setVaultUtils(address _vaultUtils) external onlyOwner {
+        require(Address.isContract(_vaultUtils), "Invalid vaultUtils");
+        vaultUtils = _vaultUtils;
+        emit SetVaultUtils(_vaultUtils);
     }
 
     function setConverter(address _converter) external onlyOwner {
@@ -270,12 +273,12 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function increaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isPositionHandler(msg.sender, true);
+        require(_isPositionHandler(msg.sender, false) || _isVaultUtils(msg.sender, false), "FBD");
         _updateGuaranteedAmount(_token, _amount, true);
     }
 
     function decreaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isPositionHandler(msg.sender, true);
+        require(_isPositionHandler(msg.sender, false) || _isVaultUtils(msg.sender, false), "FBD");
         _updateGuaranteedAmount(_token, _amount, false);
     }
 
@@ -297,7 +300,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         bytes32 _key,
         uint256 _txType
     ) external override {
-        require(msg.sender == router || msg.sender == address(swapRouter), "Forbidden: Not routers");
+        require(msg.sender == positionRouter || msg.sender == address(swapRouter), "Forbidden: Not routers");
         require(_amount > 0 && _token != address(0), "Invalid amount or token");
         settingsManager.isApprovalCollateralToken(_token, true);
 
@@ -416,7 +419,9 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         }
     }
 
-    function transferBounty(address _account, uint256 _amount) external override hasAccess {
+    function transferBounty(address _account, uint256 _amount) external override {
+        require(_isInternal(), "FBD");
+
         if (_account != address(0) && _amount > 0) {
             IMintable(RUSD).mint(_account, _amount);
             emit TransferBounty(_account, _amount);
@@ -479,7 +484,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
 
         aum = shortProfits > aum ? 0 : aum - shortProfits;
-        return (aumDeduction > aum ? 0 : aum - aumDeduction) + tokenBalances.get(address(RUSD));
+        return (aumDeduction > aum ? 0 : aum - aumDeduction) + _tryGet(tokenBalances, RUSD);
     }
 
     function getWhitelistTokens() public view returns (address[] memory) {
@@ -529,13 +534,14 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
         uint256 mintAmount;
         uint256 totalRolp = totalROLP();
+        uint256 totalUsd = _getTotalUSD();
 
-        if (totalRolp == 0) {
+        if (totalRolp == 0 || totalUsd == 0) {
             mintAmount =
                 (usdAmountAfterFee * DEFAULT_ROLP_PRICE * (10 ** ROLP_DECIMALS)) /
                 (PRICE_PRECISION * BASIS_POINTS_DIVISOR);
         } else {
-            mintAmount = (usdAmountAfterFee * totalRolp) / _getTotalUSD();
+            mintAmount = (usdAmountAfterFee * totalRolp) / totalUsd;
         }
 
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
@@ -544,7 +550,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         lastStakedAt[_account] = block.timestamp;
         _increaseTokenBalances(_token, _amount);
         _increasePoolAmount(_token, usdAmountAfterFee);
-        stakeAmounts[_token] += _amount;
+        stakeAmounts[_token] += usdAmountAfterFee;
         emit Stake(_account, _token, _amount, mintAmount);
     }
 
@@ -562,7 +568,8 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         uint256 usdAmount = (_rolpAmount * _getTotalUSD()) / totalRolp;
         uint256 usdAmountFee = (usdAmount * settingsManager.unstakingFee()) / BASIS_POINTS_DIVISOR;
         uint256 usdAmountAfterFee = usdAmount - usdAmountFee;
-        uint256 amountOutInToken = _tokenOut == RUSD ? usdAmount: priceManager.fromUSDToToken(_tokenOut, usdAmountAfterFee);
+        uint256 amountOutInToken = usdAmountAfterFee == 0 ? 0 
+            : (_tokenOut == RUSD ? usdAmountAfterFee: priceManager.fromUSDToToken(_tokenOut, usdAmountAfterFee));
         require(amountOutInToken > 0, "Unstaking amount too low");
 
         _decreaseTokenBalances(_tokenOut, amountOutInToken);
@@ -570,7 +577,7 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
         require(IERC20(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
-        stakeAmounts[_tokenOut] -= amountOutInToken;
+        stakeAmounts[_tokenOut] -= usdAmountAfterFee;
         emit Unstake(msg.sender, _tokenOut, _rolpAmount, amountOutInToken);
     }
 
@@ -713,20 +720,19 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
     }
 
     function _isInternal() internal view returns (bool) {
-        return _isRouter(msg.sender, false) || _isPositionHandler(msg.sender, false) 
-            || _isSwapRouter(msg.sender, false);
+        return _isPosition() || _isSwapRouter(msg.sender, false);
     }
 
     function _isPosition() internal view returns (bool) {
         return _isPositionHandler(msg.sender, false) 
-            || _isRouter(msg.sender, false);
+            || _isPositionRouter(msg.sender, false);
     }
 
-    function _isRouter(address _caller, bool _raise) internal view returns (bool) {
-        bool res = _caller == address(router);
+    function _isPositionRouter(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == address(positionRouter);
 
         if (_raise && !res) {
-            revert("Forbidden: Not router");
+            revert("Forbidden: Not positionRouter");
         }
 
         return res;
@@ -747,6 +753,16 @@ contract Vault is Constants, ReentrancyGuard, Ownable, IVault {
 
         if (_raise && !res) {
             revert("Forbidden: Not swapRouter");
+        }
+
+        return res;
+    }
+
+    function _isVaultUtils(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == vaultUtils;
+
+        if (_raise && !res) {
+            revert("Forbidden: Not vaultUtils");
         }
 
         return res;

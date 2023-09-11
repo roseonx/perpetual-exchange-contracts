@@ -41,6 +41,7 @@ async function main() {
 	let upgradeMap = new Map();
 	//upgradeMap.set("PositionHandler", "PositionHandlerV2_1");
 	//upgradeMap.set("PositionKeeper", "PositionKeeperV2_1");
+	upgradeMap.set("Vault", "VaultV2_1");
 	
 
 	for (let contractName of upgradeMap.keys()) {

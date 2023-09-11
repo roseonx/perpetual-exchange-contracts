@@ -116,7 +116,7 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
     function initialize(
         address _priceManager,
         address _positionHandler
-    ) public reinitializer(1) {
+    ) public initializer {
         __Ownable_init();
         _finalInitialize(
             _priceManager,

@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.12;
 
-interface ISwapRouter {
+interface ISwapRouterV2 {
     function swapFromInternal(
         address _account,
         bytes32 _key,

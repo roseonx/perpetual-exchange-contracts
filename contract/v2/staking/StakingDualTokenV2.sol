@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-interface ITracker {
-    function burn(address _addr, uint256 _amount) external ;
-    function mint(address _addr, uint256 _amount) external ;
-}
+import "./interfaces/ITrackerV2.sol";
 
-contract StakingDual is Ownable, ReentrancyGuard {
-    using SafeMath for uint256;
-    using SafeERC20 for IERC20;
+contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+    using SafeMathUpgradeable for uint256;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
 
     event Deposit(address indexed user, address indexed token, uint256 amount);
     event Withdraw(address indexed user, address indexed token ,uint256 amount);
@@ -46,7 +43,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
     }
 
     struct RewardInfo {
-        IERC20 rwToken;
+        IERC20Upgradeable rwToken;
         uint256 tokenPerSecond; // Accumulated token per share, times 1e18.
         uint256 accTokenPerShare; //  token tokens distribution per second.
     }
@@ -57,8 +54,8 @@ contract StakingDual is Ownable, ReentrancyGuard {
     }
 
     RewardInfo[] public rewardInfo;
-    IERC20 public immutable rosx;
-    IERC20 public immutable eRosx;
+    IERC20Upgradeable public ROSX;
+    IERC20Upgradeable public EROSX;
     address public stakeTracker;
     address public feeAddr; 
     uint256 public claimFee;
@@ -67,17 +64,21 @@ contract StakingDual is Ownable, ReentrancyGuard {
     // Info of user that stakes tokens.
     mapping(address => UserInfo) public userInfo;
     mapping(address => uint256) public addrStake;
-    mapping(address => mapping(IERC20 => PendingReward)) public rewardPending;
+    mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address=> bool) isAddReward;
 
-    constructor(IERC20 _rosx, IERC20 _eRosx) {
-        require(address(_rosx) != address(0), "zeroAddr");
-        require(address(_eRosx) != address(0), "zeroAddr");
-        rosx = _rosx;
-        addrStake[address(_rosx)] = 1;
-        eRosx = _eRosx;
-        addrStake[address(_eRosx)] = 2;
+    function initialize(address _ROSX, address _EROSX) public initializer {
+        require(address(_ROSX) != address(0) && address(_EROSX) != address(0), "zeroAddr");
+        ROSX = IERC20Upgradeable(_ROSX);
+        addrStake[address(_ROSX)] = 1;
+        EROSX = IERC20Upgradeable(_EROSX);
+        addrStake[address(_EROSX)] = 2;
+        __Ownable_init();
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {
+        
     }
 
     modifier onlyPermission() {
@@ -102,7 +103,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
             });
     }
 
-    function addReward(IERC20 _rwToken,  uint256 _tokenPerSecond) public onlyOwner {
+    function addReward(IERC20Upgradeable _rwToken,  uint256 _tokenPerSecond) public onlyOwner {
         require(!isAddReward[address(_rwToken)], "Duplicate reward");
         updatePool(); 
         rewardInfo.push(RewardInfo ({
@@ -159,16 +160,16 @@ contract StakingDual is Ownable, ReentrancyGuard {
             uint256 pending = ((amountRosxBf.add(amountERosxBf).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(addrStake[address(rewardInfo[i].rwToken)] == 1 || addrStake[address(rewardInfo[i].rwToken)] == 2 ) {
                 if(_isCompound[i]) {
-                    ITracker(stakeTracker).mint(address(msg.sender), pendingReward.rewardPending.add(pending));
+                    ITrackerV2(stakeTracker).mint(address(msg.sender), pendingReward.rewardPending.add(pending));
                     if(addrStake[address(rewardInfo[i].rwToken)] == 1) {
                         user.amountRosx = user.amountRosx.add(pendingReward.rewardPending).add(pending);
                         pool.totalStakeRosx = pool.totalStakeRosx.add(pendingReward.rewardPending).add(pending);
-                        emit Deposit(msg.sender, address(rosx), pendingReward.rewardPending.add(pending));
+                        emit Deposit(msg.sender, address(ROSX), pendingReward.rewardPending.add(pending));
                         pendingReward.rewardPending = 0;
                     } else {
                         user.amountERosx = user.amountERosx.add(pendingReward.rewardPending).add(pending);
                         pool.totalStakeERosx = pool.totalStakeERosx.add(pendingReward.rewardPending).add(pending);
-                        emit Deposit(msg.sender, address(eRosx), pendingReward.rewardPending.add(pending));
+                        emit Deposit(msg.sender, address(EROSX), pendingReward.rewardPending.add(pending));
                         pendingReward.rewardPending = 0;
                     }
                 } else if(_isClaim[i]) {
@@ -280,17 +281,17 @@ contract StakingDual is Ownable, ReentrancyGuard {
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITracker(stakeTracker).mint(address(msg.sender), _amount);
+        ITrackerV2(stakeTracker).mint(address(msg.sender), _amount);
         if(_index == 1) {
-            rosx.safeTransferFrom(address(msg.sender), address(this), _amount);
+            ROSX.safeTransferFrom(address(msg.sender), address(this), _amount);
             user.amountRosx = user.amountRosx.add(_amount);
             poolInfo.totalStakeRosx = poolInfo.totalStakeRosx.add(_amount);
-            emit Deposit(msg.sender, address(rosx), _amount);
+            emit Deposit(msg.sender, address(ROSX), _amount);
         } else {
-            eRosx.safeTransferFrom(address(msg.sender), address(this), _amount);
+            EROSX.safeTransferFrom(address(msg.sender), address(this), _amount);
             user.amountERosx = user.amountERosx.add(_amount);
             poolInfo.totalStakeERosx = poolInfo.totalStakeERosx.add(_amount);
-            emit Deposit(msg.sender, address(eRosx), _amount);
+            emit Deposit(msg.sender, address(EROSX), _amount);
         }
         
     }
@@ -314,15 +315,15 @@ contract StakingDual is Ownable, ReentrancyGuard {
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITracker(stakeTracker).mint(address(addr), _amount);
+        ITrackerV2(stakeTracker).mint(address(addr), _amount);
         if(_index == 1) {
             user.amountRosx = user.amountRosx.add(_amount);
             poolInfo.totalStakeRosx = poolInfo.totalStakeRosx.add(_amount);
-            emit Deposit(addr, address(rosx), _amount);
+            emit Deposit(addr, address(ROSX), _amount);
         } else {
             user.amountERosx = user.amountERosx.add(_amount);
             poolInfo.totalStakeERosx = poolInfo.totalStakeERosx.add(_amount);
-            emit Deposit(addr, address(eRosx), _amount);
+            emit Deposit(addr, address(EROSX), _amount);
         }
         return true;
     }
@@ -351,17 +352,17 @@ contract StakingDual is Ownable, ReentrancyGuard {
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).sub(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
 
-        ITracker(stakeTracker).burn(address(msg.sender), _amount);
+        ITrackerV2(stakeTracker).burn(address(msg.sender), _amount);
         if (_index == 1) {
-            rosx.safeTransfer(address(msg.sender), _amount);
+            ROSX.safeTransfer(address(msg.sender), _amount);
             user.amountRosx = user.amountRosx.sub(_amount);
             pool.totalStakeRosx = pool.totalStakeRosx.sub(_amount);
-            emit Withdraw(msg.sender, address(rosx), _amount);
+            emit Withdraw(msg.sender, address(ROSX), _amount);
         } else {
-            eRosx.safeTransfer(address(msg.sender), _amount);
+            EROSX.safeTransfer(address(msg.sender), _amount);
             user.amountERosx = user.amountERosx.sub(_amount);
             pool.totalStakeERosx = pool.totalStakeERosx.sub(_amount);
-            emit Withdraw(msg.sender, address(eRosx), _amount);
+            emit Withdraw(msg.sender, address(EROSX), _amount);
         }
     }
 
@@ -422,7 +423,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         emit NewEndTime(_endTime);
     }
 
-    function updateTokenRewardByIndex(IERC20 _rwToken, uint256 _index) external onlyOwner {
+    function updateTokenRewardByIndex(IERC20Upgradeable _rwToken, uint256 _index) external onlyOwner {
         rewardInfo[_index].rwToken = _rwToken;
         emit NewTokenRwByIndex(_index, address(_rwToken));
     }
@@ -509,10 +510,10 @@ contract StakingDual is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
 
-        rosx.safeTransfer(address(msg.sender), (user.amountRosx -user.lock));
-        eRosx.safeTransfer(address(msg.sender), user.amountERosx);
+        ROSX.safeTransfer(address(msg.sender), (user.amountRosx -user.lock));
+        EROSX.safeTransfer(address(msg.sender), user.amountERosx);
 
-        ITracker(stakeTracker).burn(address(msg.sender), user.amountRosx - user.lock + user.amountERosx);
+        ITrackerV2(stakeTracker).burn(address(msg.sender), user.amountRosx - user.lock + user.amountERosx);
 
         
         pool.totalStakeRosx -= (user.amountRosx - user.lock);

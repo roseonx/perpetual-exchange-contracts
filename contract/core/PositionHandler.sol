@@ -43,12 +43,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
     event SetPositionKeeper(address positionKeeper);
     event SyncPriceOutdated(bytes32 key, uint256 txType, address[] path);
 
-    modifier onlyRouter() {
-        require(msg.sender == address(positionRouter), "FBD");
-        _;
-    }
-
-    modifier inProcess(bytes32 key) {
+    modifier notInProcess(bytes32 key) {
         require(!processing[key], "InP"); //In processing
         processing[key] = true;
         _;
@@ -103,7 +98,9 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         address[] memory _path,
         uint256[] memory _prices,
         bytes memory _data
-    ) external onlyRouter inProcess(_key) {
+    ) external notInProcess(_key) {
+        require(msg.sender == address(positionRouter), "FBD");
+        
         if (_txType != CANCEL_PENDING_ORDER) {
             require(_path.length == _prices.length && _path.length > 0, "IVLARL"); //Invalid array length
         }
@@ -382,8 +379,8 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         uint256[] memory _prices,
         Position memory _position
     ) internal {
+        uint256 prevCollateral = _position.collateral;
         uint256 amountInUSD;
-
         (amountInUSD, _position) = vaultUtils.validateAddOrRemoveCollateral(
             _amountIn,
             _txType == ADD_COLLATERAL ? true : false,
@@ -397,6 +394,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
 
         if (_txType == ADD_COLLATERAL) {
             vault.increasePoolAmount(_getLastPath(_path), amountInUSD);
+            vault.decreaseGuaranteedAmount(_getLastPath(_path), _position.collateral - prevCollateral);
         } else {
             vault.takeAssetOut(
                 _key,
@@ -407,7 +405,8 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
                 _getLastParams(_prices)
             );
 
-            vault.decreasePoolAmount(_getLastPath(_path), _amountIn);
+            vault.decreasePoolAmount(_getLastPath(_path), amountInUSD);
+            vault.increaseGuaranteedAmount(_getLastPath(_path), prevCollateral - _position.collateral);
         }
 
         positionKeeper.emitAddOrRemoveCollateralEvent(
@@ -563,7 +562,7 @@ contract PositionHandler is PositionConstants, IPositionHandler, BaseExecutor {
         Position memory _position
     ) internal {
         vaultUtils.validateConfirmDelay(_key, true);
-        require(vault.getBondAmount(_key, ADD_POSITION) >= 0, "ISFBA"); //Insufficient bond amount
+        //require(vault.getBondAmount(_key, ADD_POSITION) >= 0, "ISFBA"); //Insufficient bond amount
         uint256 pendingCollateralInUSD;
         uint256 pendingSizeInUSD;
       

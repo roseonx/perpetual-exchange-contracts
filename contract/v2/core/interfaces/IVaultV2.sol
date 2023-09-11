@@ -61,7 +61,7 @@ interface IVaultV2 {
 
     //function updateBalances() external;
 
-    //function getTokenBalance(address _token) external view returns (uint256);
+    function getTokenBalance(address _token) external view returns (uint256);
 
     //function getTokenBalances() external view returns (address[] memory, uint256[] memory);
 
@@ -76,7 +76,7 @@ interface IVaultV2 {
 
     function unstake(address _tokenOut, uint256 _rolpAmount, address _receiver) external;
 
-    // function getBond(bytes32 _key, uint256 _txType) external view returns (VaultBond memory);
+    function getBond(bytes32 _key, uint256 _txType) external view returns (VaultBond memory);
 
     // function getBondOwner(bytes32 _key, uint256 _txType) external view returns (address);
 

@@ -38,7 +38,7 @@ contract Constants is BaseConstants, BasePositionConstants {
     uint256 public constant MAX_VESTING_DURATION = 700 days;
     uint256 public constant MIN_FUNDING_RATE_INTERVAL = 1 hours;
     uint256 public constant MIN_LEVERAGE = 10000; // 1x
-    uint256 public constant MIN_FEE_REWARD_BASIS_POINTS = 50000; // 50%
+    uint256 public constant MIN_FEE_REWARD_BASIS_POINTS = 0;
 
     uint256 public constant TRAILING_STOP_TYPE_AMOUNT = 0;
     uint256 public constant TRAILING_STOP_TYPE_PERCENT = 1;

@@ -3,7 +3,6 @@
 pragma solidity ^0.8.12;
 
 //UUPS proxy lib
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -19,11 +18,12 @@ import "../../core/interfaces/IReferralSystem.sol";
 import "./interfaces/ISettingsManagerV2.sol";
 import "./interfaces/IPositionKeeperV2.sol";
 import "./interfaces/IVaultV2.sol";
+import "../tokens/interfaces/IROLPV2.sol";
 
 import {Constants} from "../../constants/Constants.sol";
 import {OrderStatus, OrderType, ConvertOrder, SwapRequest} from "../../constants/Structs.sol";
 
-contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -52,7 +52,6 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
     mapping(address => uint256) public override reservedAmounts;
     mapping(address => uint256) public override guaranteedAmounts;
     mapping(bytes32 => mapping(uint256 => VaultBond)) public bonds;
-    mapping(address => uint256) public lastStakedAt;
 
     event UpdatePoolAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
     event UpdateReservedAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
@@ -228,7 +227,7 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
     //End config functions
 
     function increasePoolAmount(address _collateralToken, uint256 _amount) public override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _increasePoolAmount(_collateralToken, _amount);
     }
 
@@ -241,7 +240,7 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
     }
 
     function decreasePoolAmount(address _collateralToken, uint256 _amount) public override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _decreasePoolAmount(_collateralToken, _amount);
     }
 
@@ -261,12 +260,12 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
     }
 
     function increaseReservedAmount(address _token, uint256 _amount) external override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _updateReservedAmount(_token, _amount, true);
     }
 
     function decreaseReservedAmount(address _token, uint256 _amount) external override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _updateReservedAmount(_token, _amount, false);
     }
 
@@ -282,12 +281,12 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
     }
 
     function increaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _updateGuaranteedAmount(_token, _amount, true);
     }
 
     function decreaseGuaranteedAmount(address _token, uint256 _amount) external override {
-        _isVaultUtils(msg.sender, true);
+        _isVaultUpdater(msg.sender, true);
         _updateGuaranteedAmount(_token, _amount, false);
     }
 
@@ -337,7 +336,7 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
         address _token, 
         uint256 _tokenPrice
     ) external override {
-        _isPositionHandler(msg.sender, true);
+        require(msg.sender == positionHandler || msg.sender == swapRouter, "Forbidden");
         address refer = address(0);
         address feeManager = settingsManager.feeManager();
         uint256 rebatePercentage;
@@ -514,7 +513,8 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
         return whitelistTokens;
     }
 
-    function updateBalance(address _token) external onlyOwner {
+    function updateBalance(address _token) external override {
+        require(msg.sender == owner() || msg.sender == swapRouter, "Forbidden");
         tokenBalances[_token] = IERC20Upgradeable(_token).balanceOf(address(this));
     }
 
@@ -542,8 +542,7 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
 
         _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
         require(mintAmount > 0, "Staking amount too low");
-        IMintable(ROLP).mint(_account, mintAmount);
-        lastStakedAt[_account] = block.timestamp;
+        IROLPV2(ROLP).mintWithCooldown(_account, mintAmount, block.timestamp + settingsManager.cooldownDuration());
         _increaseTokenBalances(_token, _amount);
         _increasePoolAmount(_token, usdAmountAfterFee);
         stakeAmounts[_token] += usdAmountAfterFee;
@@ -554,10 +553,7 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
         require(settingsManager.isApprovalCollateralToken(_tokenOut), "Invalid approvalToken");
         uint256 totalRolp = totalROLP();
         require(_rolpAmount > 0 && totalRolp > 0 && _rolpAmount <= totalRolp, "Zero amount not allowed and cant exceed total ROLP");
-        require(
-            lastStakedAt[msg.sender] + settingsManager.cooldownDuration() <= block.timestamp,
-            "Cooldown duration not yet passed"
-        );
+        require(IROLPV2(ROLP).cooldownDurations(msg.sender) >= block.timestamp, "Cooldown duration not yet passed");
         require(settingsManager.isEnableUnstaking(), "Not enable unstaking");
 
         IMintable(ROLP).burn(msg.sender, _rolpAmount);
@@ -728,19 +724,23 @@ contract VaultV2 is IVaultV2, Constants, Initializable, UUPSUpgradeable, Ownable
         return res;
     }
 
-    function _isVaultUtils(address _caller, bool _raise) internal view returns (bool) {
-        bool res = _caller == vaultUtils;
+    function _isVaultUpdater(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == vaultUtils || _isPositionHandler(_caller, false);
 
         if (_raise && !res) {
-            revert("FBD: Not vaultUtils");
+            revert("FBD: Not vaultUpdater");
         }
 
         return res;
     }
 
-    // function getBond(bytes32 _key, uint256 _txType) external override view returns (VaultBond memory) {
-    //     return bonds[_key][_txType];
-    // }
+    function getBond(bytes32 _key, uint256 _txType) external view returns (VaultBond memory) {
+        return bonds[_key][_txType];
+    }
+
+    function getTokenBalance(address _token) external view returns (uint256) {
+        return tokenBalances[_token];
+    }
 
     // function getBondOwner(bytes32 _key, uint256 _txType) external override view returns (address) {
     //     return bonds[_key][_txType].owner;

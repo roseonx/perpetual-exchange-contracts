@@ -1,26 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-interface ITracker {
-    function burn(address _addr, uint256 _amount) external ;
-    function mint(address _addr, uint256 _amount) external ;
-}
+import "./interfaces/IStakingCompoundV2.sol";
+import "./interfaces/ITrackerV2.sol";
 
-interface IStakingCompound {
-    function getAddrStaking(address _addr) external returns (uint256);
-    function depositRw(address addr, uint256 _amount, uint256 _index) external returns (bool);
-}
-
-contract StakingROLP is Ownable, ReentrancyGuard {
-    using SafeMath for uint256;
-    using SafeERC20 for IERC20;
+contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+    using SafeMathUpgradeable for uint256;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
 
     event Deposit(address indexed user, address indexed token, uint256 amount);
     event Compound(address indexed user, address indexed token, uint256 amount);
@@ -43,7 +36,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
     }
 
     struct RewardInfo {
-        IERC20 rwToken;
+        IERC20Upgradeable rwToken;
         uint256 tokenPerSecond; // Accumulated token per share, times 1e18.
         uint256 accTokenPerShare; //  token tokens distribution per second.
         //uint256 accTokenPerShareDebt;
@@ -55,20 +48,25 @@ contract StakingROLP is Ownable, ReentrancyGuard {
     }
 
     RewardInfo[] public rewardInfo;
-    IERC20 public immutable rolp;
+    IERC20Upgradeable public ROLP;
     address public stakeTracker;
     address public stakingCompound;
     // Info of pool.
     PoolInfo public poolInfo;
     // Info of user that stakes tokens.
     mapping(address => uint256) public userAmount;
-    mapping(address => mapping(IERC20 => PendingReward)) public rewardPending;
+    mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address=> bool) isAddReward;
 
-    constructor(IERC20 _rolp) {
-        require(address(_rolp) != address(0), "zeroAddr");
-        rolp = _rolp;
+    function initialize(address _ROLP) public initializer {
+        require(_ROLP != address(0), "zeroAddr");
+        ROLP = IERC20Upgradeable(_ROLP);
+        __Ownable_init();
+    } 
+
+    function _authorizeUpgrade(address) internal override onlyOwner {
+        
     }
 
     modifier onlyPermission() {
@@ -91,7 +89,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
             });
     }
 
-    function addReward(IERC20 _rwToken,  uint256 _tokenPerSecond) public onlyOwner {
+    function addReward(IERC20Upgradeable _rwToken,  uint256 _tokenPerSecond) public onlyOwner {
         require(!isAddReward[address(_rwToken)], "Duplicate reward");
         updatePool(); 
         rewardInfo.push(RewardInfo ({
@@ -143,17 +141,17 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         for (uint i = 0;  i< rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountStaked).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
-            if(IStakingCompound(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1 
-                || IStakingCompound(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 2 ) {
+            if(IStakingCompoundV2(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1 
+                || IStakingCompoundV2(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 2 ) {
 
                 if(_isCompound[i]) {
                     rewardInfo[i].rwToken.safeTransfer(stakingCompound, pendingReward.rewardPending.add(pending));
-                    if(IStakingCompound(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1) {
-                        require(IStakingCompound(stakingCompound).depositRw(msg.sender, pendingReward.rewardPending.add(pending), 1), "compound false");
+                    if(IStakingCompoundV2(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1) {
+                        require(IStakingCompoundV2(stakingCompound).depositRw(msg.sender, pendingReward.rewardPending.add(pending), 1), "compound false");
                         emit Compound(msg.sender, address(rewardInfo[i].rwToken), pendingReward.rewardPending.add(pending));
                         pendingReward.rewardPending = 0;
                     } else {
-                        require(IStakingCompound(stakingCompound).depositRw(msg.sender, pendingReward.rewardPending.add(pending), 2), "compound false");
+                        require(IStakingCompoundV2(stakingCompound).depositRw(msg.sender, pendingReward.rewardPending.add(pending), 2), "compound false");
                         emit Compound(msg.sender, address(rewardInfo[i].rwToken), pendingReward.rewardPending.add(pending));
                         pendingReward.rewardPending = 0;
                     }
@@ -255,12 +253,12 @@ contract StakingROLP is Ownable, ReentrancyGuard {
             pendingReward.rewardDebt = ((amountStaked.add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITracker(stakeTracker).mint(address(msg.sender), _amount);
+        ITrackerV2(stakeTracker).mint(address(msg.sender), _amount);
 
-        rolp.safeTransferFrom(address(msg.sender), address(this), _amount);
+        ROLP.safeTransferFrom(address(msg.sender), address(this), _amount);
         userAmount[msg.sender] = amountStaked.add(_amount);
         poolInfo.totalStake= poolInfo.totalStake.add(_amount);
-        emit Deposit(msg.sender, address(rolp), _amount);
+        emit Deposit(msg.sender, address(ROLP), _amount);
         
     }
 
@@ -286,12 +284,12 @@ contract StakingROLP is Ownable, ReentrancyGuard {
             pendingReward.rewardDebt = ((amountStaked.sub(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
 
-        ITracker(stakeTracker).burn(address(msg.sender), _amount);
+        ITrackerV2(stakeTracker).burn(address(msg.sender), _amount);
 
-        rolp.safeTransfer(address(msg.sender), _amount);
+        ROLP.safeTransfer(address(msg.sender), _amount);
         userAmount[msg.sender] = amountStaked.sub(_amount);
         pool.totalStake = pool.totalStake.sub(_amount);
-        emit Withdraw(msg.sender, address(rolp), _amount);
+        emit Withdraw(msg.sender, address(ROLP), _amount);
     }
 
     function claim(bool[] calldata _isClaim) external nonReentrant {
@@ -346,7 +344,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         emit NewEndTime(_endTime);
     }
 
-    function updateTokenRewardByIndex(IERC20 _rwToken, uint256 _index) external onlyOwner {
+    function updateTokenRewardByIndex(IERC20Upgradeable _rwToken, uint256 _index) external onlyOwner {
         rewardInfo[_index].rwToken = _rwToken;
         emit NewTokenRwByIndex(_index, address(_rwToken));
     }
@@ -388,9 +386,9 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         PoolInfo storage pool = poolInfo;
         uint256 amountStaked = userAmount[msg.sender];
        
-        rolp.safeTransfer(address(msg.sender), amountStaked);
+        ROLP.safeTransfer(address(msg.sender), amountStaked);
 
-        ITracker(stakeTracker).burn(address(msg.sender), amountStaked);
+        ITrackerV2(stakeTracker).burn(address(msg.sender), amountStaked);
 
         pool.totalStake -= amountStaked;
 

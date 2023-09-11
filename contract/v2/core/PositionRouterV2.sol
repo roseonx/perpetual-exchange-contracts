@@ -555,23 +555,24 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
                 );
 
                 if (!isSwapSuccess) {
-                    if (!(_isOpenPosition(_txType) && _isOpenPositionData(_data))) {
-                        _revertExecute(
-                            _key,
-                            _txType,
-                            params,
-                            _prices,
-                            _path,
-                            "SWF" //Swap failed
-                        );
-                    }
-
+                    _revertExecute(
+                        _key,
+                        _txType,
+                        params,
+                        _prices,
+                        _path,
+                        "SWF" //Swap failed
+                    );
+                    
                     return;
                 }
             }
 
             if (_isOpenPosition(_txType) && _isOpenPositionData(_data)) {
                 order.collateralToken = collateralToken;
+                uint256 leverage = order.pendingSize * BASIS_POINTS_DIVISOR / order.pendingCollateral;
+                order.pendingCollateral = amountIn;
+                order.pendingSize = amountIn * leverage / BASIS_POINTS_DIVISOR;
             }
         }
 

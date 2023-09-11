@@ -23,7 +23,7 @@ import "./interfaces/IVaultUtilsV2.sol";
 import {PositionConstants} from "../../constants/PositionConstants.sol";
 import {Position, OrderInfo, OrderStatus, OrderType, DataType} from "../../constants/Structs.sol";
 
-contract PositionHandlerV2_1 is PositionConstants, IPositionHandlerV2, BaseExecutorV2, 
+contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecutorV2, 
         UUPSUpgradeable, ReentrancyGuardUpgradeable {
     mapping(bytes32 => bool) private processing;
 
@@ -56,7 +56,7 @@ contract PositionHandlerV2_1 is PositionConstants, IPositionHandlerV2, BaseExecu
     function initialize(
         address _priceManager,
         address _settingsManager
-    ) public reinitializer(1) {
+    ) public initializer {
         require(AddressUpgradeable.isContract(_priceManager)
             && AddressUpgradeable.isContract(_settingsManager), "IVLCA");
         super.initialize();
@@ -407,7 +407,7 @@ contract PositionHandlerV2_1 is PositionConstants, IPositionHandlerV2, BaseExecu
                 _getLastParams(_prices)
             );
 
-            vault.decreasePoolAmount(_getLastPath(_path), _amountIn);
+            vault.decreasePoolAmount(_getLastPath(_path), amountInUSD);
             vault.increaseGuaranteedAmount(_getLastPath(_path), prevCollateral - _position.collateral);
         }
 
