@@ -226,4 +226,8 @@ contract LockCoin is ERC20Capped, MintableBaseToken {
             timeLocks[_account].schedules.length
         );
     }
+
+    function _transfer(address from, address to, uint256 value) internal override(ERC20, MintableBaseToken) {
+        MintableBaseToken._transfer(from, to, value);
+    }
 }

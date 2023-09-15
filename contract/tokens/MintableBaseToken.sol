@@ -9,9 +9,13 @@ contract MintableBaseToken is BaseToken, IMintable {
 
     uint8 public mintersCount;
     mapping(address => bool) public override isMinter;
+    bool public privateTransferMode;
+    mapping(address => bool) public whitelist;
 
     event SetMinterRole(address indexed caller, address indexed recipient);
     event RevokeMinterRole(address indexed caller, address indexed recipient);
+    event SetPrivateTransferMode(bool privateTransferMode);
+    event SetWhitelist(address indexed caller, bool isWhitelist);
 
     modifier onlyMinter() {
         require(isMinter[msg.sender], "MintableBaseToken: Not minter role");
@@ -44,6 +48,24 @@ contract MintableBaseToken is BaseToken, IMintable {
         isMinter[_minter] = false;
         mintersCount -= 1;
         emit RevokeMinterRole(msg.sender, _minter);
+    }
+
+    function setPrivateTransferMode(bool _privateTransferMode) external onlyOwner {
+        privateTransferMode = _privateTransferMode;
+        emit SetPrivateTransferMode(_privateTransferMode);
+    }
+
+    function setWhitelist(address _caller, bool _isWhitelist) external onlyOwner {
+        whitelist[_caller] = _isWhitelist;
+        emit SetWhitelist(_caller, _isWhitelist);
+    }
+
+    function _transfer(address from, address to, uint256 value) internal virtual override {
+        if (privateTransferMode) {
+            require(whitelist[msg.sender], "Not in whitelist");
+        }
+
+        super._transfer(from, to, value);
     }
 }
 
