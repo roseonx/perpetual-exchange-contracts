@@ -230,46 +230,45 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
         OrderType _orderType,
         uint256 _indexTokenPrice,
         uint256[] memory _params,
-        bool _raise
+        bool _raise,
+        bool _isLatestPrice
     ) external view override returns (bool) {
         if (_raise && _params.length != 8) {
             revert("Invalid params length, must be 8");
         }
 
         bool orderTypeFlag;
-        uint256 marketSlippage;
 
-        if (_params[5] > 0) {
-            uint256 indexTokenPrice = _indexTokenPrice == 0 ? priceManager.getLastPrice(_indexToken) : _indexTokenPrice;
+        if (_params[5] == 0) {
+            //Return true if size is zero
+            return true;
+        }
 
-            if (_isLong) {
-                if (_orderType == OrderType.LIMIT && _params[2] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.STOP && _params[3] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.STOP_LIMIT && _params[2] > 0 && _params[3] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.MARKET) {
-                    marketSlippage = _getMarketSlippage(_params[1]);
-                    checkSlippage(_isLong, _getFirstParams(_params), marketSlippage, indexTokenPrice);
-                    orderTypeFlag = true;
-                }
-            } else {
-                if (_orderType == OrderType.LIMIT && _params[2] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.STOP && _params[3] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.STOP_LIMIT && _params[2] > 0 && _params[3] > 0) {
-                    orderTypeFlag = true;
-                } else if (_orderType == OrderType.MARKET) {
-                    marketSlippage = _getMarketSlippage(_params[1]);
-                    checkSlippage(_isLong, _getFirstParams(_params), marketSlippage, indexTokenPrice);
-                    orderTypeFlag = true;
-                }
+        if (!_isLatestPrice) {
+            (_indexTokenPrice, , _isLatestPrice) = priceManager.getLatestSynchronizedPrice(_indexToken);
+        }
+
+        /*
+        param[0] is mark price (for market type only, other type use 0)
+        param[1] is slippage (for market type only, other type use 0)
+        param[2] is limit price (for limit/stop/stop_limit type only, market use 0)
+        param[3] is stop price (for limit/stop/stop_limit type only, market use 0)
+        */
+
+        if (_orderType == OrderType.LIMIT && _params[2] > 0) {
+            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice <= _params[2] : _indexTokenPrice >= _params[2]) : true;
+        } else if (_orderType == OrderType.STOP && _params[3] > 0) {
+            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice >= _params[3] : _indexTokenPrice <= _params[3]) : true;
+        } else if (_orderType == OrderType.STOP_LIMIT && _params[2] > 0 && _params[3] > 0) {
+            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice >= _params[3] : _indexTokenPrice <= _params[3]) : true;
+        } else if (_orderType == OrderType.MARKET) {
+            if (_isLatestPrice) {
+                checkSlippage(_isLong, _getFirstParams(_params), _getMarketSlippage(_params[1]), _indexTokenPrice);
             }
-        } else {
+
             orderTypeFlag = true;
         }
+
         
         if (_raise) {
             require(orderTypeFlag, "Invalid positionData");

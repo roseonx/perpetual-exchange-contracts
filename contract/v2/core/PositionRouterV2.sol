@@ -10,13 +10,13 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 
 import "../base/BasePositionV2.sol";
 import "../../swap/interfaces/ISwapRouter.sol";
-import "../../core/interfaces/IPositionRouter.sol";
+import "./interfaces/IPositionRouterV2.sol";
 import "./interfaces/IVaultV2.sol";
 import "./interfaces/IVaultUtilsV2.sol";
 
 import {Position, OrderInfo, VaultBond, OrderStatus} from "../../constants/Structs.sol";
 
-contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => PrepareTransaction) private txns;
     mapping(bytes32 => mapping(uint256 => TxDetail)) private txnDetails;
 
@@ -108,7 +108,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
         address[] memory _path
     ) external payable nonReentrant {
         require(!settingsManager.isEmergencyStop(), "EMSTP"); //Emergency stopped
-        bool shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
+        bool shouldSwap = _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params));
 
         if (_orderType != OrderType.MARKET) {
             require(msg.value == settingsManager.triggerGasFee(), "IVLTGF"); //Invalid triggerGasFee
@@ -134,7 +134,8 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
                 _orderType, 
                 _getFirstParams(prices), 
                 _params, 
-                true
+                true,
+                isFastExecute
             );
         }
 
@@ -262,7 +263,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
 
         if (_isPlus) {
             _verifyParamsLength(ADD_COLLATERAL, _params);
-            shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
+            shouldSwap = _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params));
         } else {
             _verifyParamsLength(REMOVE_COLLATERAL, _params);
             shouldSwap = _prevalidateAndCheckSwap(_path, 0, false);
@@ -307,7 +308,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
     ) external payable override nonReentrant {
         require(msg.value == settingsManager.triggerGasFee(), "IVLTGF");
         _verifyParamsLength(ADD_POSITION, _params);
-        bool shouldSwap = _prevalidateAndCheckSwap(_path, _getLastParams(_params));
+        bool shouldSwap = _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params));
         payable(settingsManager.getFeeManager()).transfer(msg.value);
         (, uint256[] memory prices) = _getPricesAndCheckFastExecute(_path);
         _modifyPosition(
@@ -323,25 +324,26 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
     }
 
     function addTrailingStop(
+        address _indexToken,
         bool _isLong,
         uint256 _posId,
-        uint256[] memory _params,
-        address[] memory _path
+        uint256[] memory _params
     ) external payable override nonReentrant {
-        require(msg.value == settingsManager.triggerGasFee(), "IVLTGF"); //Invalid triggerFasFee
-        _prevalidateAndCheckSwap(_path, 0, false);
+        _prevalidate(_indexToken);
         _verifyParamsLength(ADD_TRAILING_STOP, _params);
+        require(msg.value == settingsManager.triggerGasFee(), "IVLTGF"); //Invalid triggerFasFee
         payable(settingsManager.getFeeManager()).transfer(msg.value);
 
+        (, address[] memory path, uint256[] memory prices) = _getSingleIndexTokenPathAndPrice(_indexToken);
+
        //Fast execute for adding trailing stop
-        (, uint256[] memory prices) = _getPricesAndCheckFastExecute(_path);
         _modifyPosition(
-            _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId),
+            _getPositionKeyV2(msg.sender, _indexToken, _isLong, _posId),
             ADD_TRAILING_STOP,
             false, //isTakeAssetRequired = false for addTrailingStop
             false, //shouldSwap = false for addTrailingStop
             true, //isFastExecute = true for addTrailingStop
-            _path,
+            path,
             prices,
             abi.encode(_params)
         );
@@ -373,7 +375,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
             false, //isTakeAssetRequired = false for updateTrailingStop
             false, //shouldSwap = false for updateTrailingStop
             _isExecutor(msg.sender) ? true : isFastExecute,
-            _getSinglePath(_indexToken),
+            _getSingleIndexTokenPath(_indexToken),
             prices,
             new bytes(0)
         );
@@ -814,7 +816,10 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
         return _isDelayPosition(_txType) || _txType == ADD_TRAILING_STOP || _txType == TRIGGER_POSITION;
     }
 
-    function _prevalidateAndCheckSwap(
+    /*
+    @dev: Pre-validate check path and amountOutMin (if swap required)
+    */
+    function _prevalidateAndCheckSwapAndAom(
         address[] memory _path, 
         uint256 _amountOutMin
     ) internal view returns (bool) {
@@ -830,9 +835,9 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
         _prevalidate(_getFirstPath(_path));
         bool shouldSwap = settingsManager.validateCollateralPathAndCheckSwap(_path);
 
-        if (shouldSwap && (_path.length > 2)) {
+        if (shouldSwap && _path.length > 2 && _isVerifyAmountOutMin) {
             //Invalid amountOutMin/swapRouter
-            require(_isVerifyAmountOutMin && _amountOutMin > 0 && address(swapRouter) != address(0), "IVLAOM/SR"); 
+            require(_amountOutMin > 0 && address(swapRouter) != address(0), "IVLAOM/SR"); 
         }
 
         return shouldSwap;
@@ -964,10 +969,19 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouter, ReentrancyGuardUpg
             _txType == ADD_POSITION;
     }
 
-    function _getSinglePath(address _indexToken) internal pure returns (address[] memory) {
+    function _getSingleIndexTokenPath(address _indexToken) internal pure returns (address[] memory) {
         address[] memory path = new address[](1);
         path[0] = _indexToken;
         return path;
+    }
+
+    function _getSingleIndexTokenPathAndPrice(address _indexToken) internal view returns (bool, address[] memory, uint256[] memory) {
+        address[] memory path = new address[](1);
+        uint256[] memory prices = new uint256[](1);
+        path[0] = _indexToken;
+        (bool isFastExecute, uint256 price) = _getPriceAndCheckFastExecute(_indexToken);
+        prices[0] = price;
+        return (isFastExecute, path, prices);
     }
 
     function _getPositionKeyV2(

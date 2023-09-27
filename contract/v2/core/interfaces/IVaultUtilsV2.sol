@@ -40,7 +40,8 @@ interface IVaultUtilsV2 {
         OrderType _orderType,
         uint256 _latestTokenPrice,
         uint256[] memory _params,
-        bool _raise
+        bool _raise,
+        bool _isLatestPrice
     ) external view returns (bool);
 
     function validateSizeCollateralAmount(uint256 _size, uint256 _collateral) external view;

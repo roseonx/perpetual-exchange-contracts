@@ -249,7 +249,8 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             _getOrderType(order.positionType), 
             _getFirstParams(_prices), 
             params, 
-            true
+            true,
+            isFastExecute
         );
         
         bool isFastMarketExecute = order.positionType == POSITION_MARKET && isFastExecute;
