@@ -256,16 +256,17 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
         */
 
         if (_orderType == OrderType.LIMIT && _params[2] > 0) {
-            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice <= _params[2] : _indexTokenPrice >= _params[2]) : true;
+            //Limit type must have limit price > 0
+            orderTypeFlag = true;
         } else if (_orderType == OrderType.STOP && _params[3] > 0) {
-            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice >= _params[3] : _indexTokenPrice <= _params[3]) : true;
+            //Stop type must have limit price > 0
+            orderTypeFlag = true;
         } else if (_orderType == OrderType.STOP_LIMIT && _params[2] > 0 && _params[3] > 0) {
-            orderTypeFlag = _isLatestPrice ? (_isLong ? _indexTokenPrice >= _params[3] : _indexTokenPrice <= _params[3]) : true;
+            //Stop-limit type must have both limit price and stop price > 0
+            orderTypeFlag = true;
         } else if (_orderType == OrderType.MARKET) {
-            if (_isLatestPrice) {
-                checkSlippage(_isLong, _getFirstParams(_params), _getMarketSlippage(_params[1]), _indexTokenPrice);
-            }
-
+            //Market type need to check slippage
+            checkSlippage(_isLong, _getFirstParams(_params), _getMarketSlippage(_params[1]), _indexTokenPrice);
             orderTypeFlag = true;
         }
 
