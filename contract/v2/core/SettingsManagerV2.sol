@@ -723,7 +723,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     }
 
     function setMaxTriggerPriceLength(uint256 _maxTriggerPriceLength) external onlyOwner {
-        require(maxTriggerPriceLength > 0, "Invalid maxTriggerPriceLength");
+        require(_maxTriggerPriceLength > 0, "Invalid maxTriggerPriceLength");
         maxTriggerPriceLength = _maxTriggerPriceLength;
         emit SetMaxTriggerPriceLength(_maxTriggerPriceLength);
     }
