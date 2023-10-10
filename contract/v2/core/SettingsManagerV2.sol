@@ -79,6 +79,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     mapping(address => uint256) public override openInterestPerUser;
 
     mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster;
+    uint256 public override maxTriggerPriceLength;
 
     event FinalInitialized(
         address RUSD,
@@ -123,6 +124,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     event SetMaxFundingRate(uint256 maxFundingRate);
     event SetMaxOpenInterestPerAssetPerSide(address indexed token, bool isLong, uint256 maxOIAmount);
     event SetBorrowFeeFactor(address indexToken, uint256 feeFactor);
+    event SetMaxTriggerPriceLength(uint256 maxTriggerPriceLength);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
@@ -297,8 +299,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     }
 
     function setVaultSettings(uint256 _cooldownDuration, uint256 _feeRewardsBasisPoints) external onlyOwner {
-        require(_feeRewardsBasisPoints >= MIN_FEE_REWARD_BASIS_POINTS, "FeeRewardsBasisPoints not greater than min");
-        require(_feeRewardsBasisPoints < MAX_FEE_REWARD_BASIS_POINTS, "FeeRewardsBasisPoints not smaller than max");
+        require(_feeRewardsBasisPoints >= 0 && _feeRewardsBasisPoints <= MAX_FEE_REWARD_BASIS_POINTS, "Invalid feeRewardsBasisPoints");
         cooldownDuration = _cooldownDuration;
         feeRewardBasisPoints = _feeRewardsBasisPoints;
         emit SetVaultSettings(cooldownDuration, feeRewardBasisPoints);
@@ -719,5 +720,11 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         require(_maxFundingRate < FUNDING_RATE_PRECISION, "Invalid maxFundingRate");
         maxFundingRate = _maxFundingRate;
         emit SetMaxFundingRate(_maxFundingRate);
+    }
+
+    function setMaxTriggerPriceLength(uint256 _maxTriggerPriceLength) external onlyOwner {
+        require(maxTriggerPriceLength > 0, "Invalid maxTriggerPriceLength");
+        maxTriggerPriceLength = _maxTriggerPriceLength;
+        emit SetMaxTriggerPriceLength(_maxTriggerPriceLength);
     }
 }

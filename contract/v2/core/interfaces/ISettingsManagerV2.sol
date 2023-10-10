@@ -145,4 +145,6 @@ interface ISettingsManagerV2 {
     function getDiscountFee(address _account, uint256 _fee) external view returns (uint256);
 
     function updateFunding(address _indexToken, address _collateralToken) external;
+
+    function maxTriggerPriceLength() external view returns (uint256);
 }

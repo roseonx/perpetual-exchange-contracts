@@ -227,22 +227,28 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
                 _tpTriggeredAmounts,
                 _slTriggeredAmounts), 
         "Invalid triggerData");
+        uint256 maxTriggerPriceLength = settingsManager.maxTriggerPriceLength();
+
+        if (maxTriggerPriceLength > 0 && ((_tpPrices.length + _slPrices.length) > 0)) {
+            require(_tpPrices.length + _slPrices.length
+                <= maxTriggerPriceLength, "MaxTriggerPriceLength exceeded");
+        }
 
         if (triggerOrders[key].tpPrices.length + triggerOrders[key].slPrices.length < _tpPrices.length + _slPrices.length) {
             require(msg.value == settingsManager.triggerGasFee(), "Invalid triggerGasFee");
         }
 
         triggerOrders[key] = TriggerOrder({
-                key: key,
-                isLong: _isLong,
-                tpTriggeredAmounts: _tpTriggeredAmounts,
-                slTriggeredAmounts: _slTriggeredAmounts,
-                tpPrices: _tpPrices,
-                tpAmountPercents: _tpAmountPercents,
-                slPrices: _slPrices,
-                slAmountPercents: _slAmountPercents,
-                status: TriggerStatus.OPEN
-            });
+            key: key,
+            isLong: _isLong,
+            tpTriggeredAmounts: _tpTriggeredAmounts,
+            slTriggeredAmounts: _slTriggeredAmounts,
+            tpPrices: _tpPrices,
+            tpAmountPercents: _tpAmountPercents,
+            slPrices: _slPrices,
+            slAmountPercents: _slAmountPercents,
+            status: TriggerStatus.OPEN
+        });
 
         emit UpdateTriggerOrders(
             key,
@@ -362,12 +368,21 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         for (bool tp = true; ; tp = false) {
             uint256[] memory prices = tp ? _tpPrices : _slPrices;
             uint256[] memory triggeredAmounts = tp ? _tpTriggeredAmounts : _slTriggeredAmounts;
+            require(triggeredAmounts.length == prices.length, "Invalid price/triggeredAmount length");
             bool pricesAreUpperBounds = tp ? _isLong : !_isLong;
-            
+            uint256 sumPrice;
+
             for (uint256 i = 0; i < prices.length; ++i) {
+                sumPrice += prices[i];
+
                 if (triggeredAmounts[i] == 0 && (_indexPrice < prices[i]) != pricesAreUpperBounds) {
                     return false;
                 }
+            }
+
+            //Validate if all prices duplicated
+            if (prices.length > 1 && sumPrice > 0) {
+                require(prices[0] * prices.length != sumPrice, "Invalid price");
             }
 
             if (!tp) {
