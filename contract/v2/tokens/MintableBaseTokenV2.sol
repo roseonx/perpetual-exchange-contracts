@@ -11,6 +11,7 @@ abstract contract MintableBaseTokenV2 is BaseTokenV2, IMintable {
     mapping(address => bool) public override isMinter;
     bool public privateTransferMode;
     mapping(address => bool) public whitelist;
+    uint256[50] private __gap;
 
     event SetMinterRole(address indexed caller, address indexed recipient);
     event RevokeMinterRole(address indexed caller, address indexed recipient);
