@@ -10,7 +10,7 @@ contract BaseAccess is Ownable {
     event GrantAccess(address indexed account, bool hasAccess);
 
     modifier limitAccess {
-        require(hasAccess[tx.origin] || hasAccess[msg.sender], "A:FBD");
+        require(hasAccess[msg.sender], "A:FBD");
         _;
     }
 
