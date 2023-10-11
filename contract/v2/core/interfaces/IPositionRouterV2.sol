@@ -115,7 +115,6 @@ interface IPositionRouterV2 {
 
     function triggerPosition(
         bytes32 _key,
-        bool _isFastExecute,
         uint256 _txType,
         address[] memory _path,
         uint256[] memory _prices
