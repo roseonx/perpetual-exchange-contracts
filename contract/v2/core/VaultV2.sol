@@ -735,4 +735,26 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     // function getBondAmount(bytes32 _key, uint256 _txType) external override view returns (uint256) {
     //     return bonds[_key][_txType].amount;
     // }
+
+    /*
+    @dev: Let converter convert RUSD to token, will be disabled when ReferralSystemV2 is ready.
+    */
+    function convertRUSD(
+        address _account,
+        address _recipient, 
+        address _tokenOut, 
+        uint256 _amount
+    ) external nonReentrant {
+        require(msg.sender == converter, "FBD");
+        settingsManager.isApprovalCollateralToken(_tokenOut, true);
+        require(settingsManager.isEnableConvertRUSD(), "Convert RUSD temporarily disabled");
+        require(_amount > 0 && IERC20Upgradeable(RUSD).balanceOf(_account) >= _amount, "Insufficient RUSD to convert");
+        IMintable(RUSD).burn(_account, _amount);
+        uint256 amountOut = settingsManager.isStable(_tokenOut) ? priceManager.fromUSDToToken(_tokenOut, _amount, PRICE_PRECISION) 
+                : priceManager.fromUSDToToken(_tokenOut, _amount);
+        require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOut, "Insufficient");
+        IERC20Upgradeable(_tokenOut).safeTransfer(_recipient, amountOut);
+        _decreaseTokenBalances(_tokenOut, amountOut);
+        emit ConvertRUSD(_recipient, _tokenOut, _amount, amountOut);
+    }
 }
