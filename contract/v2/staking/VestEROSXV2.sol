@@ -32,6 +32,7 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     mapping(address => VestingData) public vesting;
+    uint256[50] private __gap;
 
     function initialize(address _claimableToken, address _esToken) public initializer {
         require(address(_claimableToken) != address(0), "zeroAddr");

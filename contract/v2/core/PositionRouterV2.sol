@@ -9,7 +9,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import "../base/BasePositionV2.sol";
-import "../../swap/interfaces/ISwapRouter.sol";
+import "../swap/interfaces/ISwapRouterV2.sol";
 import "./interfaces/IPositionRouterV2.sol";
 import "./interfaces/IVaultV2.sol";
 import "./interfaces/IVaultUtilsV2.sol";
@@ -25,7 +25,8 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
     address public triggerOrderManager;
 
     //Implement later
-    ISwapRouter public swapRouter; 
+    ISwapRouterV2 public swapRouter; 
+    uint256[50] private __gap;
     
     event FinalInitialized(
         address priceManager,
@@ -97,7 +98,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
 
     function setSwapRouter(address _swapRouter) external onlyOwner {
         require(AddressUpgradeable.isContract(_swapRouter), "IVLCA"); //Invalid contract address
-        swapRouter = ISwapRouter(_swapRouter);
+        swapRouter = ISwapRouterV2(_swapRouter);
         emit SetSwapRouter(_swapRouter);
     }
     
@@ -409,7 +410,6 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
     */
     function triggerPosition(
         bytes32 _key,
-        bool _isFastExecute,
         uint256 _txType,
         address[] memory _path,
         uint256[] memory _prices
@@ -421,7 +421,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
             _txType,
             false, //isTakeAssetRequired = false for triggerPosition
             false, //shouldSwap = false for triggerPosition
-            msg.sender == address(triggerOrderManager) ? true : _isFastExecute,
+            true, //isFastExecute = true
             _path,
             _prices,
             abi.encode(_getParams(_key, _txType))

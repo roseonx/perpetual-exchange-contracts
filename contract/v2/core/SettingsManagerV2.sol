@@ -80,6 +80,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
 
     mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster;
     uint256 public override maxTriggerPriceLength;
+    uint256[50] private __gap;
 
     event FinalInitialized(
         address RUSD,

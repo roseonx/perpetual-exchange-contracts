@@ -28,6 +28,7 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
     mapping(bytes32 => uint256) public override leverages;
     mapping(address => mapping(bool => uint256)) public override globalAmounts; //Global long/short trading amount
     mapping (address => uint256) public globalShortAveragePrices;
+    uint256[50] private __gap;
 
     struct FinalPath {
         address indexToken;

@@ -67,6 +67,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address=> bool) isAddReward;
+    uint256[50] private __gap;
 
     function initialize(address _ROSX, address _EROSX) public initializer {
         require(address(_ROSX) != address(0) && address(_EROSX) != address(0), "zeroAddr");

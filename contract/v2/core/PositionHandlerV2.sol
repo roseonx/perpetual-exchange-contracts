@@ -34,6 +34,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
     IVaultUtilsV2 public vaultUtils;
     IPositionKeeperV2 public positionKeeper;
     IPositionRouter public positionRouter;
+    uint256[50] private __gap;
 
     event FinalInitialized(
         address priceManager,
@@ -447,7 +448,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         bytes32 _key,
         OrderInfo memory _order
     ) internal {
-        require(_order.status == OrderStatus.PENDING, "IVLOS/P"); //Invalid _order status, must be pending
+        require(_order.status == OrderStatus.PENDING, "IVLOS/P"); //Invalid order status, must be pending
         require(_order.positionType != POSITION_MARKET, "NACMO"); //Not allowing cancel market order
         bool isTrailingStop = _order.positionType == POSITION_TRAILING_STOP;
 

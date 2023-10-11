@@ -26,6 +26,7 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
     address public positionHandler;
     IPositionKeeperV2 public positionKeeper;
     IVaultV2 public vault;
+    uint256[50] private __gap;
 
     event FinalInitialized(
         address priceManager,

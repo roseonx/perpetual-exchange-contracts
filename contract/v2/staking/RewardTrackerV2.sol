@@ -44,6 +44,7 @@ contract RewardTrackerV2 is OwnableUpgradeable, IERC20Upgradeable, ReentrancyGua
     bool public inPrivateStakingMode;
     bool public inPrivateClaimingMode;
     mapping (address => bool) public isHandler;
+    uint256[50] private __gap;
 
     event Claim(address receiver, uint256 amount);
     event FinalInitialize(address[] depositTokens, address distributor);

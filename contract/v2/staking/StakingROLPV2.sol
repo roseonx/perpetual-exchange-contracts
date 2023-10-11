@@ -58,6 +58,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address=> bool) isAddReward;
+    uint256[50] private __gap;
 
     function initialize(address _ROLP) public initializer {
         require(_ROLP != address(0), "zeroAddr");

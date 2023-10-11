@@ -20,6 +20,7 @@ contract RewardDistributorV2 is IRewardDistributorV2, ReentrancyGuardUpgradeable
     address public rewardTracker;
 
     address public admin;
+    uint256[50] private __gap;
 
     event Distribute(uint256 amount);
     event TokensPerIntervalChange(uint256 amount);

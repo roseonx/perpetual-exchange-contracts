@@ -8,15 +8,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20Burnable
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 contract StakedTrackerV2 is ERC20BurnableUpgradeable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
-    
-    mapping(address => bool) public  isMinter;
+    mapping(address => bool) public isMinter;
+    bool public inPrivateTransferMode;
+    uint256[50] private __gap;
 
     modifier onlyMinter() {
         require(isMinter[msg.sender], "MintableBaseToken: forbidden");
         _;
     }
-
-    bool public inPrivateTransferMode = true;
 
     function initialize(
         string memory _name,
@@ -25,6 +24,7 @@ contract StakedTrackerV2 is ERC20BurnableUpgradeable, OwnableUpgradeable, Pausab
         __Ownable_init();
         __ERC20_init(_name, _symbol);
         __ERC20Burnable_init();
+        inPrivateTransferMode = true;
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {

@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 
 import "../../core/interfaces/IPriceManager.sol";
 import "../../core/interfaces/ITriggerOrderManager.sol";
-import "../../core/interfaces/IPositionRouter.sol";
+import "./interfaces/IPositionRouterV2.sol";
 import "./interfaces/IPositionHandlerV2.sol";
 import "./interfaces/IPositionKeeperV2.sol";
 import "./interfaces/ISettingsManagerV2.sol";
@@ -17,8 +17,9 @@ import {Constants} from "../../constants/Constants.sol";
 import {Position, TriggerStatus, TriggerOrder} from "../../constants/Structs.sol";
 
 contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
-    IPositionRouter public positionRouter;
+    IPositionRouterV2 public positionRouter;
     mapping(bytes32 => TriggerOrder) public triggerOrders;
+    uint256[50] private __gap;
 
     event FinalInitialized(
         address priceManager,
@@ -73,7 +74,7 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         address _positionRouter
     ) public onlyOwner {
         require(AddressUpgradeable.isContract(_positionRouter), "Invalid positionRouter");
-        positionRouter = IPositionRouter(_positionRouter);
+        positionRouter = IPositionRouterV2(_positionRouter);
         emit FinalInitialized(
             address(priceManager),
             address(settingsManager),
@@ -85,6 +86,10 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
+    /*
+    @dev: Trigger position, called by positionOwner.
+        * Required isFastPrice = true then the process may work as trigger flow, otherwise revert.
+    */
     function triggerPosition(
         address _account,
         address _indexToken,
@@ -95,7 +100,7 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         _prevalidate(_indexToken);
         bytes32 key = _getPositionKey(_account, _indexToken, _isLong, _posId);
         (Position memory position, OrderInfo memory order) = positionKeeper.getPositions(key);
-        require(msg.sender == position.owner || _isExecutor(msg.sender), "Invalid positionOwner");
+        require(msg.sender == position.owner, "Invalid positionOwner");
         address[] memory path;
         bool isFastExecute;
         uint256[] memory prices;
@@ -107,31 +112,22 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
             require(txn.status == TRANSACTION_STATUS_PENDING, "Invalid txStatus");
             txType = _getTxTypeFromPositionType(order.positionType);
             require(_isDelayPosition(txType), "Invalid delayOrder");
-            uint256[] memory params = positionRouter.getParams(key, txType);
-            require(params.length > 0, "Invalid triggerParams");
-
             path = positionRouter.getPath(key, txType);
-            require(_indexToken == path[0], "Invalid indexToken");
+            require(path.length > 0 && _indexToken == path[0], "Invalid indexToken");
             (isFastExecute, prices) = _getPricesAndCheckFastExecute(path);
-
-            if (!isFastExecute) {
-                revert("This delay position trigger has already pending");
-            }
-        }  else {
+            require(isFastExecute, "This delay position trigger has already pending to execute");
+            require(positionRouter.getParams(key, txType).length > 0, "Invalid triggerParams");
+        } else {
             //Trigger for addTrailingStop or updateTriggerOrders
             path = positionKeeper.getPositionFinalPath(key);
             (isFastExecute, prices) = _getPricesAndCheckFastExecute(path);
+            require(isFastExecute, "This trigger has already pending to execute");
             txType = order.positionType == POSITION_TRAILING_STOP ? ADD_TRAILING_STOP : TRIGGER_POSITION;
-
-            if (txType == ADD_TRAILING_STOP && !isFastExecute) {
-                revert("This trigger has already pending");
-            }
         }
 
-        require(path.length > 0 && path.length == prices.length, "Invalid arrayLength");
+        require(path.length == prices.length && prices.length > 0, "Invalid prices"); 
         positionRouter.triggerPosition(
             key,
-            isFastExecute,
             txType,
             path,
             prices

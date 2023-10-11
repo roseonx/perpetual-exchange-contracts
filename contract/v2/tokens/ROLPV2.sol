@@ -2,13 +2,21 @@
 
 pragma solidity 0.8.12;
 
-import "../../tokens/MintableBaseToken.sol";
+import "./MintableBaseTokenV2.sol";
 import "./interfaces/IROLPV2.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract ROLP is MintableBaseToken, IROLPV2 {
+contract ROLPV2 is MintableBaseTokenV2, IROLPV2, UUPSUpgradeable {
     mapping(address => uint256) public override cooldownDurations;
+    uint256[50] private __gap;
 
-    constructor() MintableBaseToken("Roseon LP", "ROLP", 0) {}
+    function initialize() public initializer {
+        _initialize("Roseon LP", "ROLP", 0);
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {
+        
+    }
 
     function id() external pure returns (string memory _name) {
         return "ROLP";
@@ -34,7 +42,7 @@ contract ROLP is MintableBaseToken, IROLPV2 {
         }
     }
 
-    function mintWithCooldown(address _account, uint256 _amount, uint256 _cooldown) external override onlyMinter() {
+    function mintWithCooldown(address _account, uint256 _amount, uint256 _cooldown) external override onlyMinter {
         cooldownDurations[_account] = _cooldown;
         super._mint(_account, _amount);
     }

@@ -45,6 +45,9 @@ contract SwapRouterV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpg
     address public swapV2Factory;
     address public swapV2Router;
 
+    //Gap
+    uint256[50] private __gap;
+
     event FinalInitialized(
         address vault,
         address settingsManager,

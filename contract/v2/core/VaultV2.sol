@@ -41,7 +41,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     ISettingsManagerV2 public settingsManager;
     IPositionKeeperV2 public positionKeeper;
     address public positionHandler;
-    IReferralSystem public referralSystem;
+    address public referralSystem;
     address public swapRouter;
     address public positionRouter;
     address public converter;
@@ -52,6 +52,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     mapping(address => uint256) public override reservedAmounts;
     mapping(address => uint256) public override guaranteedAmounts;
     mapping(bytes32 => mapping(uint256 => VaultBond)) public bonds;
+    uint256[50] private __gap;
 
     event UpdatePoolAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
     event UpdateReservedAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
@@ -221,7 +222,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     }
 
     function setRefferalSystem(address _refferalSystem) external onlyOwner {
-        referralSystem = IReferralSystem(_refferalSystem);
+        referralSystem = _refferalSystem;
         emit SetRefferalSystem(_refferalSystem);
     }
     //End config functions
@@ -634,25 +635,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         }
 
         emit RescueERC20(_recipient, _token, _amount);
-    }
-
-    function convertRUSD(
-        address _account,
-        address _recipient, 
-        address _tokenOut, 
-        uint256 _amount
-    ) external nonReentrant {
-        require(msg.sender == _account || msg.sender == converter, "FBD");
-        settingsManager.isApprovalCollateralToken(_tokenOut, true);
-        require(settingsManager.isEnableConvertRUSD(), "Convert RUSD temporarily disabled");
-        require(_amount > 0 && IERC20Upgradeable(RUSD).balanceOf(_account) >= _amount, "Insufficient RUSD to convert");
-        IMintable(RUSD).burn(_account, _amount);
-        uint256 amountOut = settingsManager.isStable(_tokenOut) ? priceManager.fromUSDToToken(_tokenOut, _amount, PRICE_PRECISION) 
-                : priceManager.fromUSDToToken(_tokenOut, _amount);
-        require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOut, "Insufficient");
-        IERC20Upgradeable(_tokenOut).safeTransfer(_recipient, amountOut);
-        _decreaseTokenBalances(_tokenOut, amountOut);
-        emit ConvertRUSD(_recipient, _tokenOut, _amount, amountOut);
     }
 
     function directDeposit(address _token, uint256 _amount) external {

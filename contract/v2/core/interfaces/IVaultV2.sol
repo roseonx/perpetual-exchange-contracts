@@ -65,13 +65,6 @@ interface IVaultV2 {
 
     //function getTokenBalances() external view returns (address[] memory, uint256[] memory);
 
-    function convertRUSD(
-        address _account,
-        address _recipient, 
-        address _tokenOut, 
-        uint256 _amount
-    ) external;
-
     function stake(address _account, address _token, uint256 _amount) external;
 
     function unstake(address _tokenOut, uint256 _rolpAmount, address _receiver) external;
