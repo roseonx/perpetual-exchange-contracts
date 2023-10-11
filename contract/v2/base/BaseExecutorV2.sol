@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 abstract contract BaseExecutorV2 is OwnableUpgradeable {
     mapping(address => bool) public executors;
+    uint256[50] private __gap;
 
     event SetExecutor(address indexed account, bool hasAccess);
 

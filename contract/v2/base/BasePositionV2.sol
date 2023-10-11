@@ -17,6 +17,7 @@ abstract contract BasePositionV2 is PositionConstants, BaseExecutorV2 {
     ISettingsManagerV2 public settingsManager;
     IPositionHandlerV2 public positionHandler;
     IPositionKeeperV2 public positionKeeper;
+    uint256[50] private __gap;
 
     function _initialize(
         address _priceManager,

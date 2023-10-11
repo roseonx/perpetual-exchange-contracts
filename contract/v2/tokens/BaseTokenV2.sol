@@ -10,6 +10,7 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 contract BaseTokenV2 is Initializable, OwnableUpgradeable, PausableUpgradeable, ERC20BurnableUpgradeable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+    uint256[50] private __gap;
     
     event RescueToken(address indexed caller, address indexed indexToken, address indexed recipient, uint256 amount);
 
