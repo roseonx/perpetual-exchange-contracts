@@ -9,7 +9,8 @@ import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import "./interfaces/IStakingCompoundV2.sol";
-import "./interfaces/ITrackerV2.sol";
+import "../tokens//interfaces/IMintable.sol";
+import "../tokens//interfaces/IBurnable.sol";
 
 contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeMathUpgradeable for uint256;
@@ -57,7 +58,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     mapping(address => uint256) public userAmount;
     mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
-    mapping(address=> bool) isAddReward;
+    mapping(address => bool) isAddReward;
     uint256[50] private __gap;
 
     function initialize(address _ROLP) public initializer {
@@ -139,7 +140,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
         uint256 amountStaked = userAmount[msg.sender];
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountStaked).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(IStakingCompoundV2(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1 
@@ -173,7 +174,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
             }
         }
 
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = ((userAmount[msg.sender]).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
@@ -245,7 +246,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = (amountStaked.mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -254,7 +255,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
             pendingReward.rewardDebt = ((amountStaked.add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITrackerV2(stakeTracker).mint(address(msg.sender), _amount);
+        IMintable(stakeTracker).mint(address(msg.sender), _amount);
 
         ROLP.safeTransferFrom(address(msg.sender), address(this), _amount);
         userAmount[msg.sender] = amountStaked.add(_amount);
@@ -276,7 +277,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
        
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountStaked).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -285,7 +286,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
             pendingReward.rewardDebt = ((amountStaked.sub(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
 
-        ITrackerV2(stakeTracker).burn(address(msg.sender), _amount);
+        IBurnable(stakeTracker).burn(address(msg.sender), _amount);
 
         ROLP.safeTransfer(address(msg.sender), _amount);
         userAmount[msg.sender] = amountStaked.sub(_amount);
@@ -296,7 +297,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     function claim(bool[] calldata _isClaim) external nonReentrant {
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = (amountStaked.mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if(_isClaim[i]) {
@@ -326,9 +327,11 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
         poolInfo.startTime = _startTime;
         poolInfo.rewardEndTime = _endTime;
         poolInfo.lastTimeReward = _startTime;
-        for(uint i=0; i<_rewardPerSeconds.length; i++) {
+        
+        for (uint i = 0; i<_rewardPerSeconds.length; i++) {
             rewardInfo[i].tokenPerSecond = _rewardPerSeconds[i];
         }
+
         emit NewRewardPerSecond(_rewardPerSeconds);
     }
 
@@ -350,7 +353,6 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
         emit NewTokenRwByIndex(_index, address(_rwToken));
     }
 
-    
     function setStakeTracker(address _addr) external onlyOwner {
         stakeTracker = _addr;
     }
@@ -376,7 +378,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
      * @dev Only callable by owner. Needs to be for emergency.
      */
     function emergencyRewardWithdraw(uint256[] calldata _amount) external onlyOwner {
-        for(uint i=0; i<_amount.length; i++) {
+        for (uint i = 0; i<_amount.length; i++) {
             rewardInfo[i].rwToken.transfer(address(msg.sender), _amount[i]);
         }
         emit EmergencyRewardWithdraw(msg.sender, _amount);
@@ -386,18 +388,13 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     function emergencyWithdraw() public nonReentrant {
         PoolInfo storage pool = poolInfo;
         uint256 amountStaked = userAmount[msg.sender];
-       
+        userAmount[msg.sender] = 0;
         ROLP.safeTransfer(address(msg.sender), amountStaked);
-
-        ITrackerV2(stakeTracker).burn(address(msg.sender), amountStaked);
-
+        IBurnable(stakeTracker).burn(address(msg.sender), amountStaked);
         pool.totalStake -= amountStaked;
-
         emit EmergencyWithdraw(msg.sender, amountStaked);
 
-        userAmount[msg.sender] = 0;
-
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;

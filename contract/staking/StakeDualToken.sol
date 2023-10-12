@@ -69,7 +69,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
     mapping(address => uint256) public addrStake;
     mapping(address => mapping(IERC20 => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
-    mapping(address=> bool) isAddReward;
+    mapping(address => bool) isAddReward;
 
     constructor(IERC20 _rosx, IERC20 _eRosx) {
         require(address(_rosx) != address(0), "zeroAddr");
@@ -154,7 +154,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         uint256 amountRosxBf = user.amountRosx;
         uint256 amountERosxBf = user.amountERosx;
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountRosxBf.add(amountERosxBf).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(addrStake[address(rewardInfo[i].rwToken)] == 1 || addrStake[address(rewardInfo[i].rwToken)] == 2 ) {
@@ -189,7 +189,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
             }
         }
 
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
@@ -271,7 +271,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -305,7 +305,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[addr];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[addr][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -342,7 +342,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         }
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -368,7 +368,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
     function claim(bool[] calldata _isClaim) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if(_isClaim[i]) {
@@ -403,7 +403,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         poolInfo.startTime = _startTime;
         poolInfo.rewardEndTime = _endTime;
         poolInfo.lastTimeReward = _startTime;
-        for(uint i=0; i<_rewardPerSeconds.length; i++) {
+        for (uint i = 0; i < _rewardPerSeconds.length; i++) {
             rewardInfo[i].tokenPerSecond = _rewardPerSeconds[i];
         }
         emit NewRewardPerSecond(_rewardPerSeconds);
@@ -439,7 +439,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
     {
         updatePool();
         poolInfo.totalPoint = _totalPoint;
-        for(uint i=0; i<_users.length; i++) {
+        for (uint i = 0; i < _users.length; i++) {
             for(uint j=0; j<rewardInfo.length; j++) {
                 UserInfo storage user = userInfo[msg.sender];
                 PendingReward storage pendingReward = rewardPending[_users[i]][rewardInfo[j].rwToken];
@@ -524,7 +524,7 @@ contract StakingDual is Ownable, ReentrancyGuard {
         user.amountRosx = user.lock;
         user.amountERosx = 0;
         user.point = 0;
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;

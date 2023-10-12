@@ -8,7 +8,8 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-import "./interfaces/ITrackerV2.sol";
+import "../tokens/interfaces/IMintable.sol";
+import "../tokens/interfaces/IBurnable.sol";
 
 contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeMathUpgradeable for uint256;
@@ -156,12 +157,12 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         uint256 amountRosxBf = user.amountRosx;
         uint256 amountERosxBf = user.amountERosx;
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountRosxBf.add(amountERosxBf).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(addrStake[address(rewardInfo[i].rwToken)] == 1 || addrStake[address(rewardInfo[i].rwToken)] == 2 ) {
                 if(_isCompound[i]) {
-                    ITrackerV2(stakeTracker).mint(address(msg.sender), pendingReward.rewardPending.add(pending));
+                    IMintable(stakeTracker).mint(address(msg.sender), pendingReward.rewardPending.add(pending));
                     if(addrStake[address(rewardInfo[i].rwToken)] == 1) {
                         user.amountRosx = user.amountRosx.add(pendingReward.rewardPending).add(pending);
                         pool.totalStakeRosx = pool.totalStakeRosx.add(pendingReward.rewardPending).add(pending);
@@ -191,7 +192,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             }
         }
 
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
@@ -273,7 +274,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -282,7 +283,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITrackerV2(stakeTracker).mint(address(msg.sender), _amount);
+        IMintable(stakeTracker).mint(address(msg.sender), _amount);
         if(_index == 1) {
             ROSX.safeTransferFrom(address(msg.sender), address(this), _amount);
             user.amountRosx = user.amountRosx.add(_amount);
@@ -307,7 +308,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         UserInfo storage user = userInfo[addr];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[addr][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -316,7 +317,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).add(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
       
-        ITrackerV2(stakeTracker).mint(address(addr), _amount);
+        IMintable(stakeTracker).mint(address(addr), _amount);
         if(_index == 1) {
             user.amountRosx = user.amountRosx.add(_amount);
             poolInfo.totalStakeRosx = poolInfo.totalStakeRosx.add(_amount);
@@ -344,7 +345,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         }
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -353,7 +354,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             pendingReward.rewardDebt = ((user.amountRosx.add(user.amountERosx).add(user.point).sub(_amount)).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
 
-        ITrackerV2(stakeTracker).burn(address(msg.sender), _amount);
+        IBurnable(stakeTracker).burn(address(msg.sender), _amount);
         if (_index == 1) {
             ROSX.safeTransfer(address(msg.sender), _amount);
             user.amountRosx = user.amountRosx.sub(_amount);
@@ -370,7 +371,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     function claim(bool[] calldata _isClaim) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((user.amountRosx.add(user.amountERosx).add(user.point)).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if(_isClaim[i]) {
@@ -405,7 +406,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         poolInfo.startTime = _startTime;
         poolInfo.rewardEndTime = _endTime;
         poolInfo.lastTimeReward = _startTime;
-        for(uint i=0; i<_rewardPerSeconds.length; i++) {
+        for (uint i = 0; i < _rewardPerSeconds.length; i++) {
             rewardInfo[i].tokenPerSecond = _rewardPerSeconds[i];
         }
         emit NewRewardPerSecond(_rewardPerSeconds);
@@ -441,7 +442,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     {
         updatePool();
         poolInfo.totalPoint = _totalPoint;
-        for(uint i=0; i<_users.length; i++) {
+        for (uint i = 0; i < _users.length; i++) {
             for(uint j=0; j<rewardInfo.length; j++) {
                 UserInfo storage user = userInfo[msg.sender];
                 PendingReward storage pendingReward = rewardPending[_users[i]][rewardInfo[j].rwToken];
@@ -457,6 +458,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
 
     function lock(address _addr, uint256 _amount) external onlyPermission returns (bool) {
         UserInfo storage user = userInfo[_addr];
+
         if(user.lock + _amount <= user.amountRosx) {
              user.lock += _amount;
             return true;
@@ -514,7 +516,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         ROSX.safeTransfer(address(msg.sender), (user.amountRosx -user.lock));
         EROSX.safeTransfer(address(msg.sender), user.amountERosx);
 
-        ITrackerV2(stakeTracker).burn(address(msg.sender), user.amountRosx - user.lock + user.amountERosx);
+        IBurnable(stakeTracker).burn(address(msg.sender), user.amountRosx - user.lock + user.amountERosx);
 
         
         pool.totalStakeRosx -= (user.amountRosx - user.lock);
@@ -526,7 +528,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         user.amountRosx = user.lock;
         user.amountERosx = 0;
         user.point = 0;
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;

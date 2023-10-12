@@ -6,17 +6,18 @@ import "./BaseTokenV2.sol";
 import "../../tokens/interfaces/IMintable.sol";
 
 abstract contract MintableBaseTokenV2 is BaseTokenV2, IMintable {
-
     uint8 public mintersCount;
     mapping(address => bool) public override isMinter;
     bool public privateTransferMode;
     mapping(address => bool) public whitelist;
-    uint256[50] private __gap;
+    mapping(address => bool) public blacklist;
+    uint256[49] private __gap;
 
     event SetMinterRole(address indexed caller, address indexed recipient);
     event RevokeMinterRole(address indexed caller, address indexed recipient);
     event SetPrivateTransferMode(bool privateTransferMode);
     event SetWhitelist(address indexed caller, bool isWhitelist);
+    event SetBlacklist(address indexed caller, bool isBlacklist);
 
     modifier onlyMinter() {
         require(isMinter[msg.sender], "MintableBaseToken: Not minter role");
@@ -63,11 +64,17 @@ abstract contract MintableBaseTokenV2 is BaseTokenV2, IMintable {
         emit SetWhitelist(_caller, _isWhitelist);
     }
 
+    function setBlacklist(address _caller, bool _isBlacklist) external onlyOwner {
+        blacklist[_caller] = _isBlacklist;
+        emit SetWhitelist(_caller, _isBlacklist);
+    }
+
     function _transfer(address from, address to, uint256 value) internal virtual override {
         if (privateTransferMode) {
-            require(whitelist[msg.sender], "Not in whitelist");
+            require(whitelist[msg.sender] || whitelist[to], "Not in whitelist");
         }
 
+        require(!blacklist[msg.sender], "Blacklist");
         super._transfer(from, to, value);
     }
 }

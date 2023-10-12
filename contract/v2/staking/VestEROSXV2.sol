@@ -17,8 +17,9 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     event Deposit(address indexed account, uint256 amount);
     event Claim(address indexed receiver, uint256 amount);
     event Withdraw(address indexed account, uint256 amount);
+    event SetWhitelist(address indexed account, bool isWhitelist);
 
-    uint256 public vestingDuration = 5 minutes ;
+    uint256 public vestingDuration;
     address public esToken;
     address public lockRosx;
     address public claimableToken;
@@ -32,7 +33,8 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     mapping(address => VestingData) public vesting;
-    uint256[50] private __gap;
+    mapping(address => bool) public whitelist;
+    uint256[49] private __gap;
 
     function initialize(address _claimableToken, address _esToken) public initializer {
         require(address(_claimableToken) != address(0), "zeroAddr");
@@ -40,6 +42,7 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
         claimableToken = _claimableToken;
         esToken = _esToken;
         __Ownable_init();
+        vestingDuration = 5 minutes;
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {
@@ -48,7 +51,12 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
 
     function deposit(uint256 _amount) external nonReentrant {
         require(_amount > 0, "Amount Invalid");
-        require(ILockROSX(lockRosx).lock(msg.sender, _amount), "Not Token Reserve");
+        bool isSuccessLock = ILockROSX(lockRosx).lock(msg.sender, _amount);
+
+        if (!whitelist[msg.sender]) {
+            require(isSuccessLock, "Not Token Reserve");
+        }
+
         require(IERC20Upgradeable(esToken).transferFrom(msg.sender, address(this), _amount), "TransferFrom Fail");
         _updateVesting(msg.sender);
         vesting[msg.sender].amountStake = vesting[msg.sender].amountStake.add(_amount);
@@ -57,12 +65,16 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
 
     function withdraw(uint256 _amount) external nonReentrant {
         require(_amount > 0, "Amount Invalid");
-
-         _updateVesting(msg.sender);
+        _updateVesting(msg.sender);
         VestingData storage userVesting = vesting[msg.sender];
 
         require(_amount <= userVesting.amountStake, "Amount Invalid");
-        require(ILockROSX(lockRosx).unLock(msg.sender, _amount), "Not Token Reserve");
+        bool isSuccessUnlock = ILockROSX(lockRosx).unLock(msg.sender, _amount);
+
+        if (!whitelist[msg.sender]) {
+            require(isSuccessUnlock, "Not Token Reserve");
+        }
+
         require(IERC20Upgradeable(esToken).transfer(msg.sender, _amount), "Transfer Fail");
         userVesting.amountStake = userVesting.amountStake.sub(_amount);
         emit Withdraw(msg.sender, _amount);
@@ -96,7 +108,12 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     
         userVesting.amountStake = userVesting.amountStake.sub(amount);
         userVesting.amountDebt = userVesting.amountDebt.add(amount);
-        require(ILockROSX(lockRosx).unLock(msg.sender, amount), "Not Token Reserve");
+        bool isSuccessUnlock = ILockROSX(lockRosx).unLock(msg.sender, amount);
+
+        if (!whitelist[msg.sender]) {
+            require(isSuccessUnlock, "Not Token Reserve");
+        }
+
         IBurnable(esToken).burn(address(this), amount);
     }
 
@@ -108,13 +125,13 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
         }
 
         uint256 timeDiff = block.timestamp.sub(userVesting.lastVestingTime);
-
         uint256 vestedAmount = userVesting.amountStake;
         uint256 claimableAmount = vestedAmount.mul(timeDiff).div(vestingDuration);
 
         if (claimableAmount < vestedAmount) {
             return claimableAmount;
         }
+
         return vestedAmount;
     }
     
@@ -129,12 +146,17 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
         lockRosx = _lockRosx;
     }
 
-    // to help users who accidentally send their tokens to this contract
+    //To help users who accidentally send their tokens to this contract
     function withdrawToken(address _token, address _account, uint256 _amount) external onlyOwner {
         IERC20Upgradeable(_token).transfer(_account, _amount);
     }
 
     function setVestingDuration(uint256 _vestingDuration) external onlyOwner {
         vestingDuration = _vestingDuration;
+    }
+
+    function setWhitelist(address _account, bool _isWhitelist) external onlyOwner {
+        whitelist[_account] = _isWhitelist;
+        emit SetWhitelist(_account, _isWhitelist);
     }
 }

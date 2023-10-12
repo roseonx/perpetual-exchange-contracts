@@ -64,7 +64,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
     mapping(address => uint256) public userAmount;
     mapping(address => mapping(IERC20 => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
-    mapping(address=> bool) isAddReward;
+    mapping(address => bool) isAddReward;
 
     constructor(IERC20 _rolp) {
         require(address(_rolp) != address(0), "zeroAddr");
@@ -140,7 +140,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         uint256 amountStaked = userAmount[msg.sender];
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountStaked).mul(rewardInfo[i].accTokenPerShare)).div(1e18).sub(pendingReward.rewardDebt);
             if(IStakingCompound(stakingCompound).getAddrStaking(address(rewardInfo[i].rwToken)) == 1 
@@ -174,7 +174,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
             }
         }
 
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = ((userAmount[msg.sender]).mul(rewardInfo[i].accTokenPerShare)).div(1e18);
         }
@@ -246,7 +246,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
        
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = (amountStaked.mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -277,7 +277,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
        
 
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = ((amountStaked).mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if (pending > 0) {
@@ -297,7 +297,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
     function claim(bool[] calldata _isClaim) external nonReentrant {
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             uint256 pending = (amountStaked.mul(rewardInfo[i].accTokenPerShare).div(1e18)).sub(pendingReward.rewardDebt);
             if(_isClaim[i]) {
@@ -327,7 +327,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
         poolInfo.startTime = _startTime;
         poolInfo.rewardEndTime = _endTime;
         poolInfo.lastTimeReward = _startTime;
-        for(uint i=0; i<_rewardPerSeconds.length; i++) {
+        for (uint i = 0; i < _rewardPerSeconds.length; i++) {
             rewardInfo[i].tokenPerSecond = _rewardPerSeconds[i];
         }
         emit NewRewardPerSecond(_rewardPerSeconds);
@@ -377,7 +377,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
      * @dev Only callable by owner. Needs to be for emergency.
      */
     function emergencyRewardWithdraw(uint256[] calldata _amount) external onlyOwner {
-        for(uint i=0; i<_amount.length; i++) {
+        for (uint i = 0; i < _amount.length; i++) {
             rewardInfo[i].rwToken.transfer(address(msg.sender), _amount[i]);
         }
         emit EmergencyRewardWithdraw(msg.sender, _amount);
@@ -398,7 +398,7 @@ contract StakingROLP is Ownable, ReentrancyGuard {
 
         userAmount[msg.sender] = 0;
 
-        for (uint i = 0;  i< rewardInfo.length; i++) {
+        for (uint i = 0;  i < rewardInfo.length; i++) {
             PendingReward storage pendingReward = rewardPending[msg.sender][rewardInfo[i].rwToken];
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;
