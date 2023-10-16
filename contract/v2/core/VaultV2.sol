@@ -554,7 +554,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         require(settingsManager.isApprovalCollateralToken(_tokenOut), "Invalid approvalToken");
         uint256 totalRolp = totalROLP();
         require(_rolpAmount > 0 && totalRolp > 0 && _rolpAmount <= totalRolp, "Zero amount not allowed and cant exceed total ROLP");
-        require(IROLPV2(ROLP).cooldownDurations(msg.sender) >= block.timestamp, "Cooldown duration not yet passed");
+        require(block.timestamp >= IROLPV2(ROLP).cooldownDurations(msg.sender), "Cooldown duration not yet passed");
         require(settingsManager.isEnableUnstaking(), "Not enable unstaking");
 
         IMintable(ROLP).burn(msg.sender, _rolpAmount);
