@@ -16,7 +16,7 @@ import "./interfaces/IVaultUtilsV2.sol";
 
 import {Position, OrderInfo, VaultBond, OrderStatus} from "../../constants/Structs.sol";
 
-contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract PositionRouterV2_3 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => PrepareTransaction) private txns;
     mapping(bytes32 => mapping(uint256 => TxDetail)) private txnDetails;
 
@@ -25,8 +25,9 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
     address public triggerOrderManager;
 
     //Implement later
-    ISwapRouterV2 public swapRouter; 
-    uint256[50] private __gap;
+    ISwapRouterV2 public swapRouter;
+    uint256 public isNotAllowContractCall;
+    uint256[49] private __gap;
     
     event FinalInitialized(
         address priceManager,
@@ -59,6 +60,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
         uint256 txType,
         string err
     );
+    event SetNotAllowContractCall(uint256 isNotAllowContractCall);
 
     function initialize (
         address _priceManager,
@@ -68,7 +70,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
         address _vault, 
         address _vaultUtils,
         address _triggerOrderManager
-    ) public initializer {
+    ) public reinitializer(3) {
         require(AddressUpgradeable.isContract(_vault) 
             && AddressUpgradeable.isContract(_vaultUtils)
             && AddressUpgradeable.isContract(_triggerOrderManager), "IVLCA"); //Invalid contract address
@@ -90,6 +92,7 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
             _vaultUtils, 
             _triggerOrderManager
         );
+        isNotAllowContractCall = 1;
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {
@@ -108,6 +111,10 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
         uint256[] memory _params,
         address[] memory _path
     ) external payable nonReentrant {
+        if (_isNotAllowContractCall()) {
+            require(!AddressUpgradeable.isContract(msg.sender), "Not allowed");
+        }
+        
         require(!settingsManager.isEmergencyStop(), "EMSTP"); //Emergency stopped
         bool shouldSwap = _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params));
 
@@ -1020,5 +1027,14 @@ contract PositionRouterV2 is BasePositionV2, IPositionRouterV2, ReentrancyGuardU
     */
     function _isOpenPositionData(bytes memory _data) internal pure returns (bool) {
         return _data.length == 704;     
+    }
+
+    function setNotAllowContractCall(uint256 _notAllowContractCall) external onlyOwner {
+        isNotAllowContractCall = _notAllowContractCall > 0 ? 1 : 0;
+        emit SetNotAllowContractCall(isNotAllowContractCall);
+    }
+
+    function _isNotAllowContractCall() internal view returns (bool) {
+        return isNotAllowContractCall != 0;
     }
 }

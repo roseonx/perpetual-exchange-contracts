@@ -16,10 +16,11 @@ import "../base/BasePositionV2.sol";
 import {Constants} from "../../constants/Constants.sol";
 import {Position, TriggerStatus, TriggerOrder} from "../../constants/Structs.sol";
 
-contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract TriggerOrderManagerV2_2 is ITriggerOrderManager, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     IPositionRouterV2 public positionRouter;
     mapping(bytes32 => TriggerOrder) public triggerOrders;
-    uint256[50] private __gap;
+    uint256 public isNotAllowContractCall;
+    uint256[49] private __gap;
 
     event FinalInitialized(
         address priceManager,
@@ -50,6 +51,7 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         bool isLastSynchronizePrice
     );
     event UpdateTriggerStatus(bytes32 key, TriggerStatus status);
+    event SetNotAllowContractCall(uint256 isNotAllowContractCall);
 
     modifier onlyPositionaHandler() {
         require(msg.sender == address(positionHandler), "Forbidden: Not positionHandler");
@@ -61,13 +63,14 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         address _settingsManager,
         address _positionHandler, 
         address _positionKeeper
-    ) public initializer {
+    ) public reinitializer(2) {
         _initialize(
             _priceManager,
             _settingsManager,
             _positionHandler, 
             _positionKeeper
         );
+        isNotAllowContractCall = 1;
     }
 
     function finalInitialize(
@@ -98,6 +101,11 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
     ) external nonReentrant {
         require(settingsManager.isTradable(_indexToken), "Invalid indexToken");
         _prevalidate(_indexToken);
+
+        if (_isNotAllowContractCall()) {
+            require(!AddressUpgradeable.isContract(msg.sender), "Not allowed");
+        }
+
         bytes32 key = _getPositionKey(_account, _indexToken, _isLong, _posId);
         (Position memory position, OrderInfo memory order) = positionKeeper.getPositions(key);
         require(msg.sender == position.owner, "Invalid positionOwner");
@@ -387,5 +395,14 @@ contract TriggerOrderManagerV2 is ITriggerOrderManager, BasePositionV2, UUPSUpgr
         }
 
         return true;
+    }
+
+    function setNotAllowContractCall(uint256 _notAllowContractCall) external onlyOwner {
+        isNotAllowContractCall = _notAllowContractCall > 0 ? 1 : 0;
+        emit SetNotAllowContractCall(isNotAllowContractCall);
+    }
+
+    function _isNotAllowContractCall() internal view returns (bool) {
+        return isNotAllowContractCall != 0;
     }
 }

@@ -23,7 +23,7 @@ import "../tokens/interfaces/IROLPV2.sol";
 import {Constants} from "../../constants/Constants.sol";
 import {OrderStatus, OrderType, ConvertOrder, SwapRequest} from "../../constants/Structs.sol";
 
-contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract VaultV2_4 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -123,7 +123,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     function initialize(
         address _ROLP, 
         address _RUSD
-    ) public initializer {
+    ) public reinitializer(4) {
         require(AddressUpgradeable.isContract(_ROLP) 
             && AddressUpgradeable.isContract(_RUSD), "IVLCA");
         __Ownable_init();
@@ -404,29 +404,33 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         bytes32 _key,
         uint256 _txType
     ) external override {
-        _isPosition();
+        require(_isPosition(), "FBD");
         VaultBond memory bond = bonds[_key][_txType];
 
         if (bond.owner == _account && bond.amount >= 0 && bond.token != address(0)) {
-            IERC20Upgradeable(bond.token).safeTransfer(_account, bond.amount);
-            _decreaseBond(_key, _account, _txType);
+            _decreaseBond(_key, _account, _txType, bond.amount);
             _decreaseTokenBalances(bond.token, bond.amount);
+            IERC20Upgradeable(bond.token).safeTransfer(_account, bond.amount);
             emit TakeAssetBack(_account, bond.amount, bond.token, _key, _txType);
         }
     }
 
     function decreaseBond(bytes32 _key, address _account, uint256 _txType) external {
         require(msg.sender == address(positionHandler) || msg.sender == swapRouter, "FBD");
-        _decreaseBond(_key, _account, _txType);
+        _decreaseBond(_key, _account, _txType, bonds[_key][_txType].amount);
     }
 
-    function _decreaseBond(bytes32 _key, address _account, uint256 _txType) internal {
+    function _decreaseBond(bytes32 _key, address _account, uint256 _txType, uint256 _decAmount) internal {
         VaultBond storage bond = bonds[_key][_txType];
+        require(bond.token != address(0) && bond.owner != address(0) && bond.owner == _account 
+            && bond.amount > 0 && _decAmount <= bond.amount, "Invalid bond");
 
-        if (bond.owner != address(0) && bond.owner == _account && bond.amount > 0) {
-            bond.amount = 0;
+        if (_decAmount == bond.amount) {
+            bond.owner = address(0);
             bond.token = address(0);
         }
+
+        bond.amount -= _decAmount;
     }
 
     function transferBounty(address _account, uint256 _amount) external override {

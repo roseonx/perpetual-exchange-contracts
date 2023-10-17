@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
-
 import "../../core/interfaces/IPriceManager.sol";
 import "../../core/interfaces/ITriggerOrderManager.sol";
 import "../../core/interfaces/IPositionRouter.sol";
@@ -224,7 +223,6 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         }
 
         //Reduce vault bond
-
         if (_txType == ADD_COLLATERAL || _txType == ADD_POSITION 
                 || (_txType == TRIGGER_POSITION && delayPositionTxType > 0)
                 || (_txType == CREATE_POSITION_MARKET && isFastExecute)) {
