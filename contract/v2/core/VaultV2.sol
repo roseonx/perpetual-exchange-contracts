@@ -23,7 +23,7 @@ import "../tokens/interfaces/IROLPV2.sol";
 import {Constants} from "../../constants/Constants.sol";
 import {OrderStatus, OrderType, ConvertOrder, SwapRequest} from "../../constants/Structs.sol";
 
-contract VaultV2_4 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -123,7 +123,7 @@ contract VaultV2_4 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     function initialize(
         address _ROLP, 
         address _RUSD
-    ) public reinitializer(4) {
+    ) public reinitializer(5) {
         require(AddressUpgradeable.isContract(_ROLP) 
             && AddressUpgradeable.isContract(_RUSD), "IVLCA");
         __Ownable_init();
@@ -410,7 +410,7 @@ contract VaultV2_4 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         if (bond.owner == _account && bond.amount >= 0 && bond.token != address(0)) {
             _decreaseBond(_key, _account, _txType, bond.amount);
             _decreaseTokenBalances(bond.token, bond.amount);
-            IERC20Upgradeable(bond.token).safeTransfer(_account, bond.amount);
+            _transferTo(bond.token, bond.amount, _account);
             emit TakeAssetBack(_account, bond.amount, bond.token, _key, _txType);
         }
     }
@@ -448,6 +448,13 @@ contract VaultV2_4 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
 
     function _transferTo(address _token, uint256 _amount, address _receiver) internal {
         if (_receiver != address(0) && _amount > 0) {
+            uint256 minimumVaultReserve = settingsManager.minimumVaultReserves(_token);
+
+            if (minimumVaultReserve > 0) {
+                require(IERC20Upgradeable(_token).balanceOf(address(this)) - _amount 
+                    >= minimumVaultReserve, "MinVaultReserve exceeded");
+            }
+
             IERC20Upgradeable(_token).safeTransfer(_receiver, _amount);
         }
     }
