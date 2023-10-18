@@ -428,11 +428,11 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
         return statusFlag;
     }
 
-    function validateSizeCollateralAmount(uint256 _size, uint256 _collateral) external pure override {
-        _validateSizeCollateralAmount(_size, _collateral);
+    function validatePositionSizeAndCollateral(uint256 _size, uint256 _collateral) external pure override {
+        _validatePositionSizeAndCollateral(_size, _collateral);
     }
 
-    function _validateSizeCollateralAmount(uint256 _size, uint256 _collateral) internal pure {
+    function _validatePositionSizeAndCollateral(uint256 _size, uint256 _collateral) internal pure {
         require(_size >= _collateral, "Position size should be greater than collateral");
     }
 
@@ -537,10 +537,12 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
     ) public view returns (uint256, Position memory) {
         _isValidContract(address(settingsManager));
         _isValidContract(address(positionKeeper));
-        _amountIn = _isPlus ? _validateAmountIn(_collateralToken, _amountIn, _collateralPrice) : _amountIn;
+        //If removeCollateral and collateralToken is stable, amountInUSD = amountIn
+        uint256 amountInUSD = !_isPlus && settingsManager.isStable(_collateralToken) 
+            ? _amountIn : _validateAmountIn(_collateralToken, _amountIn, _collateralPrice);
 
         if (!_isPlus) {
-            require(_position.collateral >= _amountIn && _position.reserveAmount >= _amountIn, "Insufficient positionCollateral");
+            require(_position.collateral >= amountInUSD && _position.reserveAmount >= amountInUSD, "Insufficient positionCollateral");
         }
 
         uint256 borrowFee = settingsManager.getBorrowFee(
@@ -548,28 +550,35 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
             _position.size - _position.collateral, 
             _position.lastIncreasedTime
         );
-        _validateSizeCollateralAmount(_position.size, _isPlus ? _position.collateral + _amountIn : _position.collateral - _amountIn);
+        _validatePositionSizeAndCollateral(_position.size, _isPlus ? _position.collateral + amountInUSD : _position.collateral - amountInUSD);
 
         if (_isPlus) {
-            _position.collateral += _amountIn;
-            _position.reserveAmount += _amountIn;
+            _position.collateral += amountInUSD;
+            _position.reserveAmount += amountInUSD;
         } else {
-            _position.collateral -= _amountIn;
-            _position.reserveAmount -= _amountIn;
+            _position.collateral -= amountInUSD;
+            _position.reserveAmount -= amountInUSD;
         }
 
-        //Set previous fee to ZERO to ignore previous fee on validateLiquidation
-        uint256 previousFee = _position.previousFee + borrowFee;
+        //Calculate newFee and set previous fee to ZERO to ignore previous fee on validateLiquidation
+        uint256 newFee = _position.previousFee + borrowFee;
         _position.previousFee = 0;
 
-        if (previousFee > 0) {
-            require(_position.collateral >= previousFee, "Fee exceeded positionCollateral");
+        if (newFee > 0) {
+            require(_position.collateral >= newFee, "Fee exceeded positionCollateral");
         }
 
-        validateLiquidation(true, true, !_isPlus, !_isPlus, _indexPrice, _position);
+        validateLiquidation(
+            true, //raise = true
+            true, //isApplyTradingFee = true
+            !_isPlus, //isApplyBorrowFee = false for addCollateral, otherwise = true
+            !_isPlus, //isApplyFundingFee = false for addCollateral, otherwise = true
+            _indexPrice,
+            _position
+        );
         _position.lastIncreasedTime = block.timestamp;
-        _position.previousFee = previousFee;
-        return (_amountIn, _position);
+        _position.previousFee = newFee;
+        return (amountInUSD, _position);
     }
 
     function beforeDecreasePositionV2(
@@ -620,7 +629,7 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
             _position.entryFunding = settingsManager.fundingIndex(_position.indexToken);
             require(_sizeDelta <= _position.size, "PositionSize exceeded");
             _position.size -= _sizeDelta;
-            _validateSizeCollateralAmount(_position.size, _position.collateral);
+            _validatePositionSizeAndCollateral(_position.size, _position.collateral);
             validateLiquidation(
                 true, 
                 false, 
@@ -653,9 +662,9 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
                 _sizeDelta,
                 _position.size - _position.collateral,
                 _indexPrice,
-                true,
-                true,
-                true,
+                true, //isApplyTradingFee = true
+                true, //isApplyBorrowFee = true
+                true, //isApplyFundingFee = true
                 _position
             );
             adjustedDelta = (_sizeDelta * delta) / _position.size;
@@ -890,6 +899,7 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
                 _indexPrice, 
                 _position
             );
+            require(newAvgPrice > 0, "IVLAP/Z"); //Invalid avgPrice/zero
             _position.averagePrice = newAvgPrice;
             _position.entryFunding = newEntryFunding;
             (fee, ) = settingsManager.getFees(
@@ -958,7 +968,6 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
 
         //Scope to avoid stack too deep error
         {
-            //positionKeeper.updateGlobalShortData(_sizeDelta, _indexPrice, false, abi.encode(_position));
             prevCollateral = _position.collateral;
             bytes memory encodedData;
             (hasProfit, fundingFee, encodedData) = beforeDecreasePosition(

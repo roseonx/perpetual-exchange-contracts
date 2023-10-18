@@ -43,7 +43,7 @@ interface IVaultUtils {
         bool _raise
     ) external view returns (bool);
 
-    function validateSizeCollateralAmount(uint256 _size, uint256 _collateral) external view;
+    function validatePositionSizeAndCollateral(uint256 _size, uint256 _collateral) external view;
 
     function validateTrailingStopInputData(
         bytes32 _key,
