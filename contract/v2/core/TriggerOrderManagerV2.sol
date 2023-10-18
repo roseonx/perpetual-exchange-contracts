@@ -6,7 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import "../../core/interfaces/IPriceManager.sol";
-import "../../core/interfaces/ITriggerOrderManager.sol";
+import "./interfaces/ITriggerOrderManagerV2.sol";
 import "./interfaces/IPositionRouterV2.sol";
 import "./interfaces/IPositionHandlerV2.sol";
 import "./interfaces/IPositionKeeperV2.sol";
@@ -16,10 +16,10 @@ import "../base/BasePositionV2.sol";
 import {Constants} from "../../constants/Constants.sol";
 import {Position, TriggerStatus, TriggerOrder} from "../../constants/Structs.sol";
 
-contract TriggerOrderManagerV2_2 is ITriggerOrderManager, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
+contract TriggerOrderManagerV2_3 is ITriggerOrderManagerV2, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     IPositionRouterV2 public positionRouter;
     mapping(bytes32 => TriggerOrder) public triggerOrders;
-    uint256 public isNotAllowContractCall;
+    uint256 public isNotAllowContractCall; //Reserve
     uint256[49] private __gap;
 
     event FinalInitialized(
@@ -63,7 +63,7 @@ contract TriggerOrderManagerV2_2 is ITriggerOrderManager, BasePositionV2, UUPSUp
         address _settingsManager,
         address _positionHandler, 
         address _positionKeeper
-    ) public reinitializer(2) {
+    ) public reinitializer(3) {
         _initialize(
             _priceManager,
             _settingsManager,
@@ -88,59 +88,6 @@ contract TriggerOrderManagerV2_2 is ITriggerOrderManager, BasePositionV2, UUPSUp
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
-
-    /*
-    @dev: Trigger position, called by positionOwner.
-        * Required isFastPrice = true then the process may work as trigger flow, otherwise revert.
-    */
-    function triggerPosition(
-        address _account,
-        address _indexToken,
-        bool _isLong,
-        uint256 _posId
-    ) external nonReentrant {
-        require(settingsManager.isTradable(_indexToken), "Invalid indexToken");
-        _prevalidate(_indexToken);
-
-        if (_isNotAllowContractCall()) {
-            require(!AddressUpgradeable.isContract(msg.sender), "Not allowed");
-        }
-
-        bytes32 key = _getPositionKey(_account, _indexToken, _isLong, _posId);
-        (Position memory position, OrderInfo memory order) = positionKeeper.getPositions(key);
-        require(msg.sender == position.owner, "Invalid positionOwner");
-        address[] memory path;
-        bool isFastExecute;
-        uint256[] memory prices;
-        uint256 txType;
-
-        if (position.size == 0) {
-            //Trigger for creating position
-            PrepareTransaction memory txn = positionRouter.getTransaction(key);
-            require(txn.status == TRANSACTION_STATUS_PENDING, "Invalid txStatus");
-            txType = _getTxTypeFromPositionType(order.positionType);
-            require(_isDelayPosition(txType), "Invalid delayOrder");
-            path = positionRouter.getPath(key, txType);
-            require(path.length > 0 && _indexToken == path[0], "Invalid indexToken");
-            (isFastExecute, prices) = _getPricesAndCheckFastExecute(path);
-            require(isFastExecute, "This delay position trigger has already pending to execute");
-            require(positionRouter.getParams(key, txType).length > 0, "Invalid triggerParams");
-        } else {
-            //Trigger for addTrailingStop or updateTriggerOrders
-            path = positionKeeper.getPositionFinalPath(key);
-            (isFastExecute, prices) = _getPricesAndCheckFastExecute(path);
-            require(isFastExecute, "This trigger has already pending to execute");
-            txType = order.positionType == POSITION_TRAILING_STOP ? ADD_TRAILING_STOP : TRIGGER_POSITION;
-        }
-
-        require(path.length == prices.length && prices.length > 0, "Invalid prices"); 
-        positionRouter.triggerPosition(
-            key,
-            txType,
-            path,
-            prices
-        );
-    }
 
     function cancelTriggerOrders(address _token, bool _isLong, uint256 _posId) external {
         bytes32 key = _getPositionKey(msg.sender, _token, _isLong, _posId);

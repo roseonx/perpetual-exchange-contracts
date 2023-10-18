@@ -113,13 +113,6 @@ interface IPositionRouterV2 {
         address[] memory _path
     ) external;
 
-    function triggerPosition(
-        bytes32 _key,
-        uint256 _txType,
-        address[] memory _path,
-        uint256[] memory _prices
-    ) external;
-
     /*
     @dev: Execute delay transaction, can only call by executor/positionHandler
     */
