@@ -494,7 +494,7 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
 
             return;
         } else if (_shouldSwap && address(swapRouter) == address(0)) {
-            //Currently not support swap ony UI
+            //Currently not support swap on UI
             revert("Swap temporarily disabled");
         }
 
