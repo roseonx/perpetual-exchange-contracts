@@ -16,7 +16,7 @@ import "./interfaces/IVaultUtilsV2.sol";
 
 import {Position, OrderInfo, VaultBond, OrderStatus} from "../../constants/Structs.sol";
 
-contract PositionRouterV2_3 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => PrepareTransaction) private txns;
     mapping(bytes32 => mapping(uint256 => TxDetail)) private txnDetails;
 
@@ -70,7 +70,7 @@ contract PositionRouterV2_3 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
         address _vault, 
         address _vaultUtils,
         address _triggerOrderManager
-    ) public reinitializer(3) {
+    ) public reinitializer(4) {
         require(AddressUpgradeable.isContract(_vault) 
             && AddressUpgradeable.isContract(_vaultUtils)
             && AddressUpgradeable.isContract(_triggerOrderManager), "IVLCA"); //Invalid contract address
@@ -409,29 +409,6 @@ contract PositionRouterV2_3 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
             path,
             prices,
             new bytes(0)
-        );
-    }
-
-    /*
-    @dev: Trigger position from triggerOrderManager
-    */
-    function triggerPosition(
-        bytes32 _key,
-        uint256 _txType,
-        address[] memory _path,
-        uint256[] memory _prices
-    ) external override {
-        require(msg.sender == address(triggerOrderManager), "FBD"); //Forbidden
-        require(positionKeeper.getPositionOwner(_key) != address(0), "Position notExist");
-        _modifyPosition(
-            _key,
-            _txType,
-            false, //isTakeAssetRequired = false for triggerPosition
-            false, //shouldSwap = false for triggerPosition
-            true, //isFastExecute = true
-            _path,
-            _prices,
-            abi.encode(_getParams(_key, _txType))
         );
     }
 
