@@ -80,7 +80,8 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
 
     mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster;
     uint256 public override maxTriggerPriceLength;
-    uint256[50] private __gap;
+    mapping(address => uint256) public override minimumVaultReserves;
+    uint256[49] private __gap;
 
     event FinalInitialized(
         address RUSD,
@@ -126,6 +127,7 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     event SetMaxOpenInterestPerAssetPerSide(address indexed token, bool isLong, uint256 maxOIAmount);
     event SetBorrowFeeFactor(address indexToken, uint256 feeFactor);
     event SetMaxTriggerPriceLength(uint256 maxTriggerPriceLength);
+    event SetMinimumVaultReserves(address token, uint256 minimumVaultReserve);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
@@ -727,5 +729,17 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         require(_maxTriggerPriceLength > 0, "Invalid maxTriggerPriceLength");
         maxTriggerPriceLength = _maxTriggerPriceLength;
         emit SetMaxTriggerPriceLength(_maxTriggerPriceLength);
+    }
+
+    /*
+    @dev: Set minimum reserve token for vault
+    */
+    function setMinimumVaultReserve(address _token, uint256 _minReserve) external onlyOwner {
+        minimumVaultReserves[_token] = _minReserve;
+        emit SetMinimumVaultReserves(_token, _minReserve);
+    }
+
+    function getMinimumReserve(address _token) external view returns (uint256) {
+        return minimumVaultReserves[_token];
     }
 }
