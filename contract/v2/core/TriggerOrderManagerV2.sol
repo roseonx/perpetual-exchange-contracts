@@ -19,7 +19,7 @@ import {Position, TriggerStatus, TriggerOrder} from "../../constants/Structs.sol
 contract TriggerOrderManagerV2_3 is ITriggerOrderManagerV2, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     IPositionRouterV2 public positionRouter;
     mapping(bytes32 => TriggerOrder) public triggerOrders;
-    uint256 public isNotAllowContractCall;
+    uint256 public isNotAllowContractCall; //Reserve
     uint256[49] private __gap;
 
     event FinalInitialized(

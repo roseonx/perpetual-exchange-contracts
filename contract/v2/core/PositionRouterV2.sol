@@ -267,16 +267,9 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
         uint256[] memory _params,
         address[] memory _path
     ) external override nonReentrant {
-        bool shouldSwap;
-
-        if (_isPlus) {
-            _verifyParamsLength(ADD_COLLATERAL, _params);
-            shouldSwap = _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params));
-        } else {
-            _verifyParamsLength(REMOVE_COLLATERAL, _params);
-            shouldSwap = _prevalidateAndCheckSwap(_path, 0, false);
-        }
-
+        _verifyParamsLength(_isPlus ? ADD_COLLATERAL : REMOVE_COLLATERAL, _params);
+        //Not swap if remove collateral
+        bool shouldSwap = _isPlus ? _prevalidateAndCheckSwapAndAom(_path, _getLastParams(_params)): false;
         bytes32 key;
         bool isFastExecute; 
         uint256[] memory prices;
@@ -285,6 +278,11 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
         {
             key = _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId);
             (isFastExecute, prices) = _getPricesAndCheckFastExecute(_path);
+        }
+
+        if (!shouldSwap) {
+            address[] memory finalPath = positionKeeper.getPositionFinalPath(key);
+            require(finalPath.length == _path.length && _getLastPath(_path) == _getLastPath(finalPath), "Invalid posPath");
         }
 
         vaultUtils.validateAddOrRemoveCollateral(
@@ -297,10 +295,10 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
         );
 
         _modifyPosition(
-            _getPositionKeyV2(msg.sender, _getFirstPath(_path), _isLong, _posId),
+            key,
             _isPlus ? ADD_COLLATERAL : REMOVE_COLLATERAL,
             _isPlus ? true : false, //isTakeAssetRequired = true for addCollateral
-            _isPlus ? shouldSwap : false,
+            shouldSwap,
             isFastExecute,
             _path,
             prices,
@@ -495,7 +493,10 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
             );
 
             return;
-        } 
+        } else if (_shouldSwap && address(swapRouter) == address(0)) {
+            //Currently not support swap on UI
+            revert("Swap temporarily disabled");
+        }
 
         Position memory position;
         OrderInfo memory order;

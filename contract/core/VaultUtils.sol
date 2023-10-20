@@ -409,7 +409,7 @@ contract VaultUtils is IVaultUtils, BasePositionConstants, Constants, Ownable {
         return statusFlag;
     }
 
-    function validateSizeCollateralAmount(uint256 _size, uint256 _collateral) external pure override {
+    function validatePositionSizeAndCollateral(uint256 _size, uint256 _collateral) external pure override {
         _validateSizeCollateralAmount(_size, _collateral);
     }
 

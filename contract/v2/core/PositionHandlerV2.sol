@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
+
 import "../../core/interfaces/IPriceManager.sol";
 import "../../core/interfaces/ITriggerOrderManager.sol";
 import "../../core/interfaces/IPositionRouter.sol";
@@ -391,7 +392,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             _getLastParams(_prices), //collateralPrice
             _position
         );
-
+        require(amountInUSD > 0, "IVLAM/Z"); //Invalid amount/zero
         positionKeeper.unpackAndStorage(_key, abi.encode(_position), DataType.POSITION);
 
         if (_txType == ADD_COLLATERAL) {
