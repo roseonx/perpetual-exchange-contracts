@@ -147,4 +147,6 @@ interface ISettingsManagerV2 {
     function updateFunding(address _indexToken, address _collateralToken) external;
 
     function maxTriggerPriceLength() external view returns (uint256);
+
+    function minimumVaultReserves(address _token) external view returns (uint256);
 }

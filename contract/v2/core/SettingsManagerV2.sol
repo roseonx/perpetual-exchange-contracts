@@ -16,7 +16,7 @@ import "../../core/interfaces/IReferralSystem.sol";
 
 import {Constants} from "../../constants/Constants.sol";
 
-contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
     address public RUSD;
@@ -80,7 +80,9 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
 
     mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster;
     uint256 public override maxTriggerPriceLength;
-    uint256[50] private __gap;
+    mapping(address => uint256) public override minimumVaultReserves;
+    mapping(address => bool) public executors;
+    uint256[48] private __gap;
 
     event FinalInitialized(
         address RUSD,
@@ -126,13 +128,15 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     event SetMaxOpenInterestPerAssetPerSide(address indexed token, bool isLong, uint256 maxOIAmount);
     event SetBorrowFeeFactor(address indexToken, uint256 feeFactor);
     event SetMaxTriggerPriceLength(uint256 maxTriggerPriceLength);
+    event SetMinimumVaultReserves(address token, uint256 minimumVaultReserve);
+    event SetExecutor(address executor, bool isExecutor);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
         _;
     }
 
-    function initialize(address _RUSD) public initializer {
+    function initialize(address _RUSD) public reinitializer(2) {
         require(AddressUpgradeable.isContract(_RUSD), "RUSD invalid");
         __Ownable_init();
         RUSD = _RUSD;
@@ -727,5 +731,23 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         require(_maxTriggerPriceLength > 0, "Invalid maxTriggerPriceLength");
         maxTriggerPriceLength = _maxTriggerPriceLength;
         emit SetMaxTriggerPriceLength(_maxTriggerPriceLength);
+    }
+
+    /*
+    @dev: Set minimum reserve token for vault, called by executor
+    */
+    function setMinimumVaultReserve(address _token, uint256 _minReserve) external {
+        require(executors[msg.sender], "FBD");
+        minimumVaultReserves[_token] = _minReserve;
+        emit SetMinimumVaultReserves(_token, _minReserve);
+    }
+
+    function getMinimumReserve(address _token) external view returns (uint256) {
+        return minimumVaultReserves[_token];
+    }
+
+    function setExecutor(address _executor, bool _isExecutor) external onlyOwner {
+        executors[_executor] = _isExecutor;
+        emit SetExecutor(_executor, _isExecutor);
     }
 }
