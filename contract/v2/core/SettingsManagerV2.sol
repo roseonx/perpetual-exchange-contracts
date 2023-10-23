@@ -272,6 +272,12 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
             openInterestPerSide[_isLong] -= _amount;
         }
 
+        if (openInterestPerAssetPerSide[_token][_isLong] < _amount) {
+            openInterestPerAssetPerSide[_token][_isLong] = 0;
+        } else {
+            openInterestPerAssetPerSide[_token][_isLong] -= _amount;
+        }
+
         emit UpdateTotalOpenInterest(_token, _isLong, _amount);
     }
 
