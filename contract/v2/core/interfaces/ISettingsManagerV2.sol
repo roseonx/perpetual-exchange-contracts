@@ -149,4 +149,6 @@ interface ISettingsManagerV2 {
     function maxTriggerPriceLength() external view returns (uint256);
 
     function minimumVaultReserves(address _token) external view returns (uint256);
+
+    function disableFastExecuteForClosePosition() external view returns (bool);
 }

@@ -331,7 +331,13 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
                 if (isLastestSync && !processing[_keys[i]]) {
                     try IPositionRouter(positionRouter).execute(_keys[i], _txTypes[i], prices) {}
                     catch (bytes memory err) {
-                        IPositionRouter(positionRouter).revertExecution(_keys[i], _txTypes[i], path, prices, string(err));
+                        IPositionRouter(positionRouter).revertExecution(
+                            _keys[i],
+                            _txTypes[i],
+                            path,
+                            prices,
+                            _getRevertMsg(err)
+                        );
                     }
                 } else {
                     emit SyncPriceOutdated(_keys[i], _txTypes[i], path);
@@ -511,6 +517,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
                 _collateralPrice,
                 _position
             );
+            _position = positionKeeper.getPosition(_key);
         }
 
         //When limit/stopLimit/stopMarket order reached price condition 
@@ -818,5 +825,19 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
 
     function _validateRouter() internal view {
         require(AddressUpgradeable.isContract(address(positionRouter)), "IVLCA"); //Invalid contractAddress
+    }
+
+    function _getRevertMsg(bytes memory _returnData) internal pure returns (string memory) {
+        //If the _res length is less than 68, then the transaction failed silently (without a revert message)
+        if (_returnData.length < 68) {
+            return "Transaction reverted silently";
+        }
+
+        assembly {
+            // Slice the sighash.
+            _returnData := add(_returnData, 0x04)
+        }
+
+        return abi.decode(_returnData, (string)); // All that remains is the revert string
     }
 }

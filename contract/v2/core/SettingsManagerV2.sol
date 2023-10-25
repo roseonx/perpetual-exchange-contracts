@@ -82,7 +82,8 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
     uint256 public override maxTriggerPriceLength;
     mapping(address => uint256) public override minimumVaultReserves;
     mapping(address => bool) public executors;
-    uint256[48] private __gap;
+    bool public override disableFastExecuteForClosePosition;
+    uint256[47] private __gap;
 
     event FinalInitialized(
         address RUSD,
@@ -112,7 +113,7 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
     event SetTriggerGasFee(uint256 indexed fee);
     event SetVaultSettings(uint256 indexed cooldownDuration, uint256 feeRewardBasisPoints);
     event UpdateFundingRate(address indexed token, bool isLong, uint256 fundingRate, uint256 lastFundingTime);
-    event UpdateTotalOpenInterest(address indexed token, bool isLong, uint256 amount);
+    event UpdateTotalOpenInterest(address indexed token, bool isLong, uint256 amount, bool isIncrease);
     event UpdateCloseDeltaTime(uint256 deltaTime);
     event UpdateDelayDeltaTime(uint256 deltaTime);
     event UpdateFeeManager(address indexed feeManager);
@@ -130,6 +131,7 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
     event SetMaxTriggerPriceLength(uint256 maxTriggerPriceLength);
     event SetMinimumVaultReserves(address token, uint256 minimumVaultReserve);
     event SetExecutor(address executor, bool isExecutor);
+    event SetDisableFastExecuteForClosePosition(bool isDisabled);
 
     modifier hasPermission() {
         require(msg.sender == address(positionHandler), "Only position handler has access");
@@ -278,7 +280,7 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
             openInterestPerAssetPerSide[_token][_isLong] -= _amount;
         }
 
-        emit UpdateTotalOpenInterest(_token, _isLong, _amount);
+        emit UpdateTotalOpenInterest(_token, _isLong, _amount, false);
     }
 
     function enableMarketOrder(bool _enable) external onlyOwner {
@@ -301,7 +303,7 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
         openInterestPerAsset[_token] += _amount;
         openInterestPerSide[_isLong] += _amount;
         openInterestPerAssetPerSide[_token][_isLong] += _amount;
-        emit UpdateTotalOpenInterest(_token, _isLong, _amount);
+        emit UpdateTotalOpenInterest(_token, _isLong, _amount, true);
     }
 
     function setFeeManager(address _feeManager) external onlyOwner {
@@ -755,5 +757,17 @@ contract SettingsManagerV2_2 is ISettingsManagerV2, Constants, Initializable, UU
     function setExecutor(address _executor, bool _isExecutor) external onlyOwner {
         executors[_executor] = _isExecutor;
         emit SetExecutor(_executor, _isExecutor);
+    }
+
+    function setDisableFastExecuteForClosePosition(bool _isDisabled) external onlyOwner {
+        disableFastExecuteForClosePosition = _isDisabled;
+        emit SetDisableFastExecuteForClosePosition(_isDisabled);
+    }
+
+    /*
+    @dev: Fix openInterestPerAssetPerSide wrong
+    */
+    function setOpenInterestPerAssetPerSide(address _token, bool _isLong, uint256 _amount) external onlyOwner {
+        openInterestPerAssetPerSide[_token][_isLong] = _amount;
     }
 }

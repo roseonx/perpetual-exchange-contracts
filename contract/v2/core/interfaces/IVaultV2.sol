@@ -78,4 +78,11 @@ interface IVaultV2 {
     // function getBondAmount(bytes32 _key, uint256 _txType) external view returns (uint256);
 
     function getTotalUSD() external view returns (uint256);
+
+    // function convertRUSD(
+    //     address _account,
+    //     address _recipient, 
+    //     address _tokenOut, 
+    //     uint256 _amount
+    // ) external;
 }

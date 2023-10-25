@@ -12,18 +12,18 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
 
+import "../tokens/interfaces/IROLPV2.sol";
 import "../../tokens/interfaces/IMintable.sol";
 import "../../core/interfaces/IPriceManager.sol";
-import "../../core/interfaces/IReferralSystem.sol";
+import "./interfaces/IReferralSystemV2.sol";
 import "./interfaces/ISettingsManagerV2.sol";
 import "./interfaces/IPositionKeeperV2.sol";
 import "./interfaces/IVaultV2.sol";
-import "../tokens/interfaces/IROLPV2.sol";
 
 import {Constants} from "../../constants/Constants.sol";
 import {OrderStatus, OrderType, ConvertOrder, SwapRequest} from "../../constants/Structs.sol";
 
-contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -41,7 +41,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     ISettingsManagerV2 public settingsManager;
     IPositionKeeperV2 public positionKeeper;
     address public positionHandler;
-    address public referralSystem;
+    IReferralSystemV2 public referralSystem;
     address public swapRouter;
     address public positionRouter;
     address public converter;
@@ -52,7 +52,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     mapping(address => uint256) public override reservedAmounts;
     mapping(address => uint256) public override guaranteedAmounts;
     mapping(bytes32 => mapping(uint256 => VaultBond)) public bonds;
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 
     event UpdatePoolAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
     event UpdateReservedAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
@@ -117,13 +117,14 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     event SetSwapRouter(address swapRouter);
     event SetConverter(address converter);
     event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
-    event ConvertRUSD(address indexed recipient, address indexed token, uint256 amountIn, uint256 amountOut);
     event SetRefferalSystem(address referralSystem);
 
     function initialize(
         address _ROLP, 
         address _RUSD
-    ) public reinitializer(5) {
+    ) public initializer {
+        require(AddressUpgradeable.isContract(_ROLP) 
+            && AddressUpgradeable.isContract(_RUSD), "IVLCA");
         __Ownable_init();
         ROLP = _ROLP;
         RUSD = _RUSD;
@@ -220,7 +221,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     function setRefferalSystem(address _refferalSystem) external onlyOwner {
-        referralSystem = _refferalSystem;
+        referralSystem = IReferralSystemV2(_refferalSystem);
         emit SetRefferalSystem(_refferalSystem);
     }
     //End config functions
@@ -335,38 +336,42 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         address _token, 
         uint256 _tokenPrice
     ) external override {
-        require(msg.sender == positionHandler || msg.sender == swapRouter, "Forbidden");
-        address refer = address(0);
-        address feeManager = settingsManager.feeManager();
+        bool isPositionHandler = msg.sender == positionHandler;
+        require(isPositionHandler || msg.sender == swapRouter || msg.sender == converter, "Forbidden");
+        address referrer;
+        uint256 discountFee;
         uint256 rebatePercentage;
+        uint256 esRebatePercentage;
         
-        if (_account != address(0) && address(referralSystem) != address(0)) {
-            (refer, , rebatePercentage) = IReferralSystem(referralSystem).getDiscountable(_account);
+        if (isPositionHandler && _fee > 0 && address(referralSystem) != address(0)) {
+            uint256 discountsharePercentage;
+            (referrer, discountsharePercentage, rebatePercentage, esRebatePercentage) = referralSystem.getDiscountableInternal(_account, _fee);
 
-            if (rebatePercentage >= BASIS_POINTS_DIVISOR) {
-                rebatePercentage = 0;
+            //Apply discount fee first
+            if (discountsharePercentage > 0) {
+                discountFee = _fee * discountsharePercentage / BASIS_POINTS_DIVISOR;
+
+                if (discountFee >= _fee) {
+                    discountFee = _fee;
+                }
+
+                _fee -= discountFee;
             }
-        }
-
-        if (refer == address(0)) {
-            refer = feeManager;
-            rebatePercentage = BASIS_POINTS_DIVISOR;
         }
 
         uint256 tokenAmountOut = _takeAssetOut(
             _account, 
-            refer, 
             _fee,
-            rebatePercentage,
+            rebatePercentage + esRebatePercentage,
             _usdOut, 
             _token, 
-            _tokenPrice,
-            feeManager
+            _tokenPrice
         );
+
         emit TakeAssetOut(
             _key, 
             _account, 
-            refer, 
+            referrer, 
             _usdOut, 
             _fee, 
             _token, 
@@ -377,13 +382,11 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
 
     function _takeAssetOut(
         address _account, 
-        address _refer,
         uint256 _fee, 
         uint256 _rebatePercentage,
         uint256 _usdOut, 
         address _token, 
-        uint256 _tokenPrice,
-        address _feeManager
+        uint256 _tokenPrice
     ) internal returns (uint256) {
         require(_token != address(0) && _tokenPrice > 0, "Invalid asset");
         uint256 usdOutAfterFee = _usdOut == 0 ? 0 : _usdOut - _fee;
@@ -392,7 +395,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         uint256 tokenAmountOut = usdOutAfterFee == 0 ? 0 : priceManager.fromUSDToToken(_token, usdOutAfterFee, tokenPrice);
         _transferTo(_token, tokenAmountOut, _account);
         _decreaseTokenBalances(_token, tokenAmountOut);
-        _collectFee(_fee, _refer, _rebatePercentage, _feeManager, false);
+        _collectFee(_fee, _rebatePercentage, settingsManager.getFeeManager(), true);
 
         return tokenAmountOut;
     }
@@ -432,7 +435,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         }
 
         bond.amount -= _decAmount;
-        
+
         if (_txType == CREATE_POSITION_STOP_LIMIT) {
             bonds[_key][CREATE_POSITION_LIMIT] = VaultBond({owner: owner, token: token, amount: _decAmount});
         }
@@ -457,7 +460,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
 
             if (minimumVaultReserve > 0) {
                 require(IERC20Upgradeable(_token).balanceOf(address(this)) - _amount 
-                    >= minimumVaultReserve, "MinVaultReserve exceeded");
+                    >= minimumVaultReserve, "MVREXD"); //MinimumVaultReserve exceeded
             }
 
             IERC20Upgradeable(_token).safeTransfer(_receiver, _amount);
@@ -557,7 +560,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
             mintAmount = (usdAmountAfterFee * totalRolp) / totalUsd;
         }
 
-        _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
+        _collectFee(usdAmountFee, 0, settingsManager.getFeeManager(), false);
         require(mintAmount > 0, "Staking amount too low");
         IROLPV2(ROLP).mintWithCooldown(_account, mintAmount, block.timestamp + settingsManager.cooldownDuration());
         _increaseTokenBalances(_token, _amount);
@@ -583,7 +586,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
 
         _decreaseTokenBalances(_tokenOut, amountOutInToken);
         _decreasePoolAmount(_tokenOut, usdAmountAfterFee);
-        _collectFee(usdAmountFee, ZERO_ADDRESS, 0, address(0), true);
+        _collectFee(usdAmountFee, 0, settingsManager.getFeeManager(), false);
         require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
         stakeAmounts[_tokenOut] -= usdAmountAfterFee;
@@ -601,43 +604,33 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     function distributeFee(bytes32 _key, address _account, uint256 _fee) external override {
         _isPositionHandler(msg.sender, true);
         address feeManager = settingsManager.feeManager();
-        _collectFee(_fee, address(0), 0, feeManager, false);
+        _collectFee(_fee, 0, feeManager, true);
 
         if (_fee > 0) {
             emit DistributeFee(_key, _account, feeManager, _fee);
         }
     }
 
-    function _collectFee(uint256 _fee, address _refer, uint256 _rebatePercentage, address _feeManager, bool _isStake) internal {
-        if (_feeManager == address(0)) {
-            _feeManager = settingsManager.feeManager();
-        }
-        
-        //Pay rebate first
-        if (_refer != ZERO_ADDRESS && settingsManager.referEnabled()) {
-            uint256 referFee = (_fee * _rebatePercentage) / BASIS_POINTS_DIVISOR;
-            _fee -= referFee;
+    function _collectFee(uint256 _fee, uint256 _rebatePercentage, address _feeManager, bool _isReserve) internal {
+        uint256 rebateAmount = _rebatePercentage == 0 ? 0 : _fee * _rebatePercentage / BASIS_POINTS_DIVISOR;
+        uint256 feeAfterRebate = rebateAmount >= _fee ? 0 : _fee - rebateAmount;
 
-            if (referFee > 0) {
-                IMintable(RUSD).mint(_refer, referFee);
-            }
-        }
-
-        if (_fee > 0 && _feeManager != ZERO_ADDRESS) {
+        if (feeAfterRebate > 0) {
             //Stake/Unstake will take full fee, otherwise reserve to vault
-            uint256 feeReserve = _isStake ? 0 : ((_fee * settingsManager.feeRewardBasisPoints()) / BASIS_POINTS_DIVISOR);
-            uint256 systemFee = _fee - feeReserve;
-            _fee -= systemFee;
+            uint256 feeReserve = _isReserve ? (feeAfterRebate * settingsManager.feeRewardBasisPoints() / BASIS_POINTS_DIVISOR) : 0;
+            uint256 systemFee = feeReserve >= feeAfterRebate ? 0 : feeAfterRebate - feeReserve;
+            feeAfterRebate = systemFee >= feeAfterRebate ? 0 : feeAfterRebate - systemFee;
 
             if (systemFee > 0) {
+                require(_feeManager != address(0), "IVLFM"); //Invalid feeManager
                 IMintable(RUSD).mint(_feeManager, systemFee);
             }
         }
 
-        if (_fee > 0) {
+        if (feeAfterRebate > 0) {
             //Reserve fee for vault
-            IMintable(RUSD).mint(address(this), _fee);
-            _increaseTokenBalances(RUSD, _fee);
+            IMintable(RUSD).mint(address(this), feeAfterRebate);
+            _increaseTokenBalances(RUSD, feeAfterRebate);
         }
     }
 
@@ -751,26 +744,4 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
     // function getBondAmount(bytes32 _key, uint256 _txType) external override view returns (uint256) {
     //     return bonds[_key][_txType].amount;
     // }
-
-    /*
-    @dev: Let converter convert RUSD to token, will be disabled when ReferralSystemV2 is ready.
-    */
-    function convertRUSD(
-        address _account,
-        address _recipient, 
-        address _tokenOut, 
-        uint256 _amount
-    ) external nonReentrant {
-        require(msg.sender == converter, "FBD");
-        settingsManager.isApprovalCollateralToken(_tokenOut, true);
-        require(settingsManager.isEnableConvertRUSD(), "Convert RUSD temporarily disabled");
-        require(_amount > 0 && IERC20Upgradeable(RUSD).balanceOf(_account) >= _amount, "Insufficient RUSD to convert");
-        IMintable(RUSD).burn(_account, _amount);
-        uint256 amountOut = settingsManager.isStable(_tokenOut) ? priceManager.fromUSDToToken(_tokenOut, _amount, PRICE_PRECISION) 
-                : priceManager.fromUSDToToken(_tokenOut, _amount);
-        require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOut, "Insufficient");
-        IERC20Upgradeable(_tokenOut).safeTransfer(_recipient, amountOut);
-        _decreaseTokenBalances(_tokenOut, amountOut);
-        emit ConvertRUSD(_recipient, _tokenOut, _amount, amountOut);
-    }
 }

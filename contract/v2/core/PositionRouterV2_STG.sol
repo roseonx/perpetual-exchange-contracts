@@ -16,7 +16,7 @@ import "./interfaces/IVaultUtilsV2.sol";
 
 import {Position, OrderInfo, OrderStatus} from "../../constants/Structs.sol";
 
-contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract PositionRouterV2_STG4 is BasePositionV2, IPositionRouterV2, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => PrepareTransaction) private txns;
     mapping(bytes32 => mapping(uint256 => TxDetail)) private txnDetails;
 
@@ -27,7 +27,8 @@ contract PositionRouterV2_4 is BasePositionV2, IPositionRouterV2, ReentrancyGuar
     //Implement later
     ISwapRouterV2 public swapRouter;
     uint256 public isNotAllowContractCall;
-    uint256[49] private __gap;
+    bytes32 private revertCode; //Reserve
+    uint256[48] private __gap;
     
     event FinalInitialized(
         address priceManager,
