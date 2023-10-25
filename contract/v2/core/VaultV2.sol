@@ -406,7 +406,7 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         VaultBond memory bond = bonds[_key][_txType];
 
         if (bond.owner == _account && bond.amount >= 0 && bond.token != address(0)) {
-            _decreaseBond(_key, _account, _txType, bond.amount);
+            _decreaseBond(_key, _account, _txType, bond.amount, true);
             _decreaseTokenBalances(bond.token, bond.amount);
             _transferTo(bond.token, bond.amount, _account);
             emit TakeAssetBack(_account, bond.amount, bond.token, _key, _txType);
@@ -415,10 +415,10 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
 
     function decreaseBond(bytes32 _key, address _account, uint256 _txType) external {
         require(msg.sender == address(positionHandler) || msg.sender == swapRouter, "FBD");
-        _decreaseBond(_key, _account, _txType, bonds[_key][_txType].amount);
+        _decreaseBond(_key, _account, _txType, bonds[_key][_txType].amount, false);
     }
 
-    function _decreaseBond(bytes32 _key, address _account, uint256 _txType, uint256 _decAmount) internal {
+    function _decreaseBond(bytes32 _key, address _account, uint256 _txType, uint256 _decAmount, bool _isTakeAssetBack) internal {
         VaultBond storage bond = bonds[_key][_txType];
         address owner = bond.owner;
         address token = bond.token;
@@ -432,8 +432,8 @@ contract VaultV2_5 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, 
         }
 
         bond.amount -= _decAmount;
-        
-        if (_txType == CREATE_POSITION_STOP_LIMIT) {
+
+        if (_txType == CREATE_POSITION_STOP_LIMIT && !_isTakeAssetBack) {
             bonds[_key][CREATE_POSITION_LIMIT] = VaultBond({owner: owner, token: token, amount: _decAmount});
         }
     }
