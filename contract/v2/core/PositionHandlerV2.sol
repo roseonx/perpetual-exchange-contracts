@@ -620,10 +620,6 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         require(liquidationState != LIQUIDATE_NONE_EXCEED, "NLS"); //Not liquidated state
         positionKeeper.updateGlobalShortData(_position.size, _indexPrice, false, abi.encode(_position));
 
-        if (_position.isLong) {
-            vault.decreaseGuaranteedAmount(_collateralToken, _position.size - _position.collateral);
-        }
-
         if (liquidationState == LIQUIDATE_THRESHOLD_EXCEED) {
             // Max leverage exceeded but there is collateral remaining after deducting losses so decreasePosition instead
             _decreasePosition(
