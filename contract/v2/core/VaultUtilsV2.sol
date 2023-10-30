@@ -928,6 +928,8 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
             _position.collateral
         );
 
+        //Validate liquidation required calculatePNL will reset previousFee to ZERO
+        uint256 previousFee = _position.previousFee;
         validateLiquidation(
             true, 
             false, 
@@ -936,6 +938,11 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
             _indexPrice, 
             _position
         );
+
+        //Add previousFee back
+        if (_position.previousFee == 0) {
+            _position.previousFee += previousFee;
+        }
 
         vault.increaseReservedAmount(_collateralToken, _sizeDelta);
 
