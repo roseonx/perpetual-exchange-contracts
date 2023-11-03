@@ -2,7 +2,7 @@
 
 import "@openzeppelin/contracts/utils/Address.sol";
 import "./interfaces/IVaultPriceFeed.sol";
-import "./interfaces/ISettingsManager.sol";
+import "./interfaces/ISettingsManagerV2.sol";
 import "../oracle/interfaces/AggregatorV3Interface.sol";
 import "../constants/BaseConstants.sol";
 import "../oracle/interfaces/IFastPriceFeed.sol";
@@ -11,7 +11,7 @@ import "../access/BaseAccess.sol";
 pragma solidity ^0.8.12;
 
 contract VaultPriceFeed is IVaultPriceFeed, BaseConstants, BaseAccess {
-    ISettingsManager public settingsManager;
+    ISettingsManagerV2 public settingsManager;
     mapping(address => address) public fastPriceFeeds;
     mapping(address => uint256) public priceDecimals;
     mapping(address => address) public chainLinkAggregators;
@@ -29,7 +29,7 @@ contract VaultPriceFeed is IVaultPriceFeed, BaseConstants, BaseAccess {
 
     function setSettingsManager(address _settingsManager) external onlyOwner {
         require(Address.isContract(_settingsManager), "Invalid settingsManager");
-        settingsManager = ISettingsManager(_settingsManager);
+        settingsManager = ISettingsManagerV2(_settingsManager);
         emit SetSettingsManager(_settingsManager);
     }
 
