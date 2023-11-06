@@ -328,7 +328,7 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
         Position memory position = positions[_key];
         _decreaseGlobalAmount(_sizeDelta, position.indexToken, position.isLong);
 
-        if (!_isPartialClose || position.size == _sizeDelta) {
+        if (!_isPartialClose) {
             delete leverages[_key];
             emit ClosePosition(
                 _key, 
