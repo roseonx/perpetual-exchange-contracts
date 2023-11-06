@@ -328,7 +328,21 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
         Position memory position = positions[_key];
         _decreaseGlobalAmount(_sizeDelta, position.indexToken, position.isLong);
 
-        if (_isPartialClose) {
+        if (!_isPartialClose || position.size == _sizeDelta) {
+            delete leverages[_key];
+            emit ClosePosition(
+                _key, 
+                position.realisedPnl, 
+                _indexPrice, 
+                [
+                    _collateralDelta, 
+                    _sizeDelta
+                ],
+                _tradingFee,
+                _fundingFee
+            );
+            delete positions[_key];
+        } else {
             emit DecreasePosition(
                 _key,
                 position.owner,
@@ -347,20 +361,6 @@ contract PositionKeeperV2 is IPositionKeeperV2, PositionConstants, UUPSUpgradeab
                 _tradingFee,
                 _fundingFee
             );
-        } else {
-            delete leverages[_key];
-            emit ClosePosition(
-                _key, 
-                position.realisedPnl, 
-                _indexPrice, 
-                [
-                    _collateralDelta, 
-                    _sizeDelta
-                ],
-                _tradingFee,
-                _fundingFee
-            );
-            delete positions[_key];
         }
     }
 

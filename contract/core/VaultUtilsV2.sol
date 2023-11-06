@@ -1016,13 +1016,13 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
         //Scope to avoid stack too deep error
         {
             prevCollateral = _position.collateral;
+            isPartialClose = _position.size != _sizeDelta;
             bytes memory encodedData;
             (hasProfit, fundingFee, encodedData) = _beforeDecreasePosition(
                 _sizeDelta, 
                 _indexPrice, 
                 _position
             );
-            isPartialClose = _position.size != _sizeDelta;
             (posData, _position) = abi.decode(encodedData, ((uint256[4]), (Position)));
         }
 
