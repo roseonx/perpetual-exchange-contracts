@@ -116,7 +116,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         address vaultUtils
     );
     event SetSwapRouter(address swapRouter);
-    event SetConverter(address converter);
     event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
     event SetRefferalSystem(address referralSystem);
 
@@ -169,11 +168,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     function setSwapRouter(address _swapRouter) external onlyOwner {
         require(AddressUpgradeable.isContract(_swapRouter), "Invalid swapRouter");
         swapRouter = _swapRouter;
-    }
-
-    function setConverter(address _converter) external onlyOwner {
-        converter = _converter;
-        emit SetConverter(_converter);
     }
 
     function setAumAdjustment(uint256 _aumAddition, uint256 _aumDeduction) external onlyOwner {
@@ -338,7 +332,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) external override {
         bool isPositionHandler = msg.sender == positionHandler;
-        require(isPositionHandler || msg.sender == swapRouter || msg.sender == converter, "Forbidden");
+        require(isPositionHandler || msg.sender == swapRouter, "Forbidden");
         address referrer;
         uint256 discountFee;
         uint256 rebatePercentage;
@@ -443,7 +437,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     }
 
     function transferBounty(address _account, uint256 _amount) external override {
-        require(_isInternal(), "FBD");
+        _isPositionHandler(msg.sender, true);
 
         if (_account != address(0) && _amount > 0) {
             IMintable(RUSD).mint(_account, _amount);
@@ -460,8 +454,9 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             uint256 minimumVaultReserve = settingsManager.minimumVaultReserves(_token);
 
             if (minimumVaultReserve > 0) {
-                require(IERC20Upgradeable(_token).balanceOf(address(this)) - _amount 
-                    >= minimumVaultReserve, "MVREXD"); //MinimumVaultReserve exceeded
+                uint256 vaultAvailable = IERC20Upgradeable(_token).balanceOf(address(this));
+                require(vaultAvailable >= _amount && vaultAvailable - _amount 
+                    >= minimumVaultReserve, "VREXD"); //VaultReserve exceeded
             }
 
             IERC20Upgradeable(_token).safeTransfer(_receiver, _amount);
@@ -677,9 +672,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         }
     }
 
-    function _isInternal() internal view returns (bool) {
-        return _isPosition() || _isSwapRouter(msg.sender, false);
-    }
 
     function _isPosition() internal view returns (bool) {
         return _isPositionHandler(msg.sender, false) 
@@ -706,15 +698,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return res;
     }
 
-    function _isSwapRouter(address _caller, bool _raise) internal view returns (bool) {
-        bool res = _caller == address(swapRouter);
-
-        if (_raise && !res) {
-            revert("FBD: Not swapRouter");
-        }
-
-        return res;
-    }
 
     function _isVaultUpdater(address _caller, bool _raise) internal view returns (bool) {
         bool res = _caller == vaultUtils || _isPositionHandler(_caller, false);

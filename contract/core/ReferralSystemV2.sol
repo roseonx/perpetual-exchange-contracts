@@ -614,8 +614,8 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         TIER_TYPE _tierType,
         uint256 _tier
     ) internal returns (uint256, uint256) {
-        require(address(rUSD) != address(0), "Invalid init rUSD");
-        require(address(esROSX) != address(0), "Invalid init esROSX");
+        require(address(rUSD) != address(0), "Invalid rUSD");
+        require(address(esROSX) != address(0), "Invalid esROSX");
         address recipient = _referrer == address(0) ? settingsManager.getFeeManager() : _referrer;
         require(recipient != address(0), "Invalid recipient");
         uint256 rebatePercentage = _getRebatePercentage(_tierType, _tier);
@@ -639,7 +639,7 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
                     try IMintable(esROSX).mint(recipient, mintEsROSXAmount) {
                         emit EscrowRebateDelivered(recipient, esRebateAmount, rosxPrice, mintEsROSXAmount, true, string(new bytes(0)));
                     } catch (bytes memory err) {
-                        emit EscrowRebateDelivered(recipient, esRebateAmount, rosxPrice, mintEsROSXAmount, false, string(err));
+                        emit EscrowRebateDelivered(recipient, esRebateAmount, rosxPrice, mintEsROSXAmount, false, _getRevertMsg(err));
                     }
                 }
             }
@@ -864,5 +864,19 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         }
 
         return accountArr;
+    }
+
+    function _getRevertMsg(bytes memory _returnData) internal pure returns (string memory) {
+        //If the _res length is less than 68, then the transaction failed silently (without a revert message)
+        if (_returnData.length < 68) {
+            return "Transaction reverted silently";
+        }
+
+        assembly {
+            // Slice the sighash.
+            _returnData := add(_returnData, 0x04)
+        }
+
+        return abi.decode(_returnData, (string)); // All that remains is the revert string
     }
 }
