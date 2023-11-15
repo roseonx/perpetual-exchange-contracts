@@ -45,7 +45,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     IReferralSystemV2 public referralSystem;
     address public swapRouter;
     address public positionRouter;
-    address public converter;
+    address public converter; //Deprecated, not use
     address public vaultUtils;
 
     mapping(address => uint256) public override stakeAmounts;
@@ -128,6 +128,8 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         __Ownable_init();
         ROLP = _ROLP;
         RUSD = _RUSD;
+        converter = address(0);
+        swapRouter = address(0);
     }
 
     function finalInitialize(
@@ -332,12 +334,13 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) external override {
         bool isPositionHandler = msg.sender == positionHandler;
-        require(isPositionHandler || msg.sender == swapRouter, "Forbidden");
+        require(isPositionHandler, "Forbidden");
         address referrer;
         uint256 discountFee;
         uint256 rebatePercentage;
         uint256 esRebatePercentage;
         
+        //Apply discount from positionHandler only, re-check isPositionHandler for reservion of other cases
         if (isPositionHandler && _fee > 0 && address(referralSystem) != address(0)) {
             uint256 discountsharePercentage;
             (referrer, discountsharePercentage, rebatePercentage, esRebatePercentage) = referralSystem.getDiscountableInternal(_account, _fee);
@@ -390,7 +393,12 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 tokenAmountOut = usdOutAfterFee == 0 ? 0 : priceManager.fromUSDToToken(_token, usdOutAfterFee, tokenPrice);
         _transferTo(_token, tokenAmountOut, _account);
         _decreaseTokenBalances(_token, tokenAmountOut);
-        _collectFee(_fee, _rebatePercentage, settingsManager.getFeeManager(), true);
+        _collectFee(
+            _fee,
+            _rebatePercentage,
+            settingsManager.getFeeManager(),
+            true
+        );
 
         return tokenAmountOut;
     }
@@ -556,7 +564,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             mintAmount = (usdAmountAfterFee * totalRolp) / totalUsd;
         }
 
-        _collectFee(usdAmountFee, 0, settingsManager.getFeeManager(), false);
+        _collectFeeNonRebate(usdAmountFee, settingsManager.getFeeManager(), false);
         require(mintAmount > 0, "Staking amount too low");
         IROLP(ROLP).mintWithCooldown(_account, mintAmount, block.timestamp + settingsManager.cooldownDuration());
         _increaseTokenBalances(_token, _amount);
@@ -582,7 +590,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
 
         _decreaseTokenBalances(_tokenOut, amountOutInToken);
         _decreasePoolAmount(_tokenOut, usdAmountAfterFee);
-        _collectFee(usdAmountFee, 0, settingsManager.getFeeManager(), false);
+        _collectFeeNonRebate(usdAmountFee, settingsManager.getFeeManager(), false);
         require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
         stakeAmounts[_tokenOut] -= usdAmountAfterFee;
@@ -600,14 +608,33 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     function distributeFee(bytes32 _key, address _account, uint256 _fee) external override {
         _isPositionHandler(msg.sender, true);
         address feeManager = settingsManager.feeManager();
-        _collectFee(_fee, 0, feeManager, true);
+        _collectFeeNonRebate(_fee, feeManager, true);
 
         if (_fee > 0) {
             emit DistributeFee(_key, _account, feeManager, _fee);
         }
     }
 
-    function _collectFee(uint256 _fee, uint256 _rebatePercentage, address _feeManager, bool _isReserve) internal {
+
+    function _collectFeeNonRebate(
+        uint256 _fee,
+        address _feeManager,
+        bool _isReserve
+    ) internal {
+        _collectFee(
+            _fee,
+            0,
+            _feeManager,
+            _isReserve
+        );
+    }
+
+    function _collectFee(
+        uint256 _fee,
+        uint256 _rebatePercentage,
+        address _feeManager,
+        bool _isReserve
+    ) internal {
         uint256 rebateAmount = _rebatePercentage == 0 ? 0 : _fee * _rebatePercentage / BASIS_POINTS_DIVISOR;
         uint256 feeAfterRebate = rebateAmount >= _fee ? 0 : _fee - rebateAmount;
 
