@@ -744,6 +744,25 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return tokenBalances[_token];
     }
 
+    /*
+    @dev: Let updater hotfix system amount
+    */
+    function updateSystemAmount(uint256 _type, uint256 _amount, address _token, bool _isPlus) external onlyOwner {
+        if (_type == 0) {
+            if (_isPlus) {
+                _increasePoolAmount(_token, _amount);
+            } else {
+                _decreasePoolAmount(_token, _amount);
+            }
+        } else if (_type == 1) {
+            _updateGuaranteedAmount(_token, _amount, _isPlus);
+        } else if (_type == 2) {
+            _updateReservedAmount(_token, _amount, _isPlus);
+        } else {
+            revert("InvalidType");
+        }
+    }
+
     // function getBondOwner(bytes32 _key, uint256 _txType) external override view returns (address) {
     //     return bonds[_key][_txType].owner;
     // }
