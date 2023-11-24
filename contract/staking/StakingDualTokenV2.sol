@@ -10,6 +10,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 
 import "../tokens/interfaces/IMintable.sol";
 import "../tokens/interfaces/IBurnable.sol";
+import "../core/interfaces/IBlacklistManager.sol";
 
 contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeMathUpgradeable for uint256;
@@ -68,7 +69,8 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address=> bool) isAddReward;
-    uint256[50] private __gap;
+    address public blacklistManager;
+    uint256[49] private __gap;
 
     function initialize(address _ROSX, address _EROSX) public initializer {
         require(address(_ROSX) != address(0) && address(_EROSX) != address(0), "zeroAddr");
@@ -152,6 +154,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     }
 
     function compound(bool[] calldata _isClaim , bool[] calldata _isCompound) external nonReentrant {
+        _validateBlacklist(msg.sender);
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
         uint256 amountRosxBf = user.amountRosx;
@@ -270,6 +273,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
      * @param _amount: amount to deposit
      */
     function deposit(uint256 _amount, uint256 _index) external nonReentrant {
+        _validateBlacklist(msg.sender);
         require(_amount > 0, "deposit: amount > 0");
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
@@ -335,6 +339,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
      * @param _amount: amount to withdraw
      */
     function withdraw(uint256 _amount, uint256 _index) public nonReentrant {
+        _validateBlacklist(msg.sender);
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
         require(_amount > 0, "withdraw: amount > 0");
@@ -369,6 +374,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
     }
 
     function claim(bool[] calldata _isClaim) external nonReentrant {
+        _validateBlacklist(msg.sender);
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
         for (uint i = 0;  i < rewardInfo.length; i++) {
@@ -509,7 +515,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
     function emergencyWithdraw() public {
-
+        _validateBlacklist(msg.sender);
         PoolInfo storage pool = poolInfo;
         UserInfo storage user = userInfo[msg.sender];
 
@@ -533,5 +539,13 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;
         }
+    }
+
+    function setBlacklistManager(address _blacklistManager) external onlyOwner {
+        blacklistManager = _blacklistManager;
+    }
+
+    function _validateBlacklist(address _account) internal view {
+        IBlacklistManager(blacklistManager).validateCaller(_account);
     }
 }

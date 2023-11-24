@@ -732,9 +732,9 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         address _tokenOut, 
         uint256 _amount
     ) external nonReentrant {
+        settingsManager.validateCaller(msg.sender);
         require(settingsManager.isApprovalCollateralToken(_tokenOut) == true, "Invalid tokenOut");
         require(settingsManager.isEnableConvertRUSD(), "Disabled");
-        require(!AddressUpgradeable.isContract(msg.sender), "Not allowed");
         require(IERC20Upgradeable(rUSD).balanceOf(msg.sender) > 0, "Insufficient");
         IBurnable(rUSD).burn(msg.sender, _amount);
         bool isStable = settingsManager.isStable(_tokenOut);

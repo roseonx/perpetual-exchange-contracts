@@ -14,8 +14,6 @@ import "./interfaces/IVaultV2.sol";
 import {Constants} from "../constants/Constants.sol";
 
 contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
-
     address public RUSD;
     IPositionKeeperV2 public positionKeeper;
     address public positionHandler;
@@ -75,13 +73,17 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     mapping(address => uint256) public override openInterestPerAsset;
     mapping(address => uint256) public override openInterestPerUser;
 
-    mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster;
+    mapping(address => EnumerableSetUpgradeable.AddressSet) private _delegatesByMaster; //Deprecated
     uint256 public override maxTriggerPriceLength;
     mapping(address => uint256) public override minimumVaultReserves;
     mapping(address => bool) public executors;
+
     bool public override disableFastExecuteForClosePosition;
     uint256 public override minimumOpenCollateral;
-    uint256[46] private __gap;
+    bool public override notAllowContractCall;
+    bool public override requiredValidateMarketSlippage;
+    mapping(address => bool) public override isBlacklist;
+    uint256[45] private __gap;
 
     event FinalInitialized(
         address RUSD,
@@ -241,12 +243,6 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         emit SetMaxOpenInterestPerAssetPerSide(_token, _isLong, _maxAmount);
     }
     //End config functions
-
-    function delegate(address[] memory _delegates) external {
-        for (uint256 i = 0; i < _delegates.length; ++i) {
-            EnumerableSetUpgradeable.add(_delegatesByMaster[msg.sender], _delegates[i]);
-        }
-    }
 
     function decreaseOpenInterest(
         address _token,
@@ -409,12 +405,6 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         emit SetEnableConvertRUSD(_isEnableConvertRUSD);
     }
 
-    function undelegate(address[] memory _delegates) external {
-        for (uint256 i = 0; i < _delegates.length; ++i) {
-            EnumerableSetUpgradeable.remove(_delegatesByMaster[msg.sender], _delegates[i]);
-        }
-    }
-
     function getFeesV2(
         bytes32 _key,
         uint256 _sizeDelta,
@@ -473,10 +463,6 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         return (tradingFee, fundingFee);
     }
 
-    function getDelegates(address _master) external view override returns (address[] memory) {
-        return enumerate(_delegatesByMaster[_master]);
-    }
-
     function validatePosition(
         address _account,
         address _indexToken,
@@ -518,21 +504,6 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
                 maxOpenInterestPerAssetPerSide[_indexToken][_isLong],
             "Max OI per asset/size exceeded"
         );
-    }
-
-    function enumerate(EnumerableSetUpgradeable.AddressSet storage set) internal view returns (address[] memory) {
-        uint256 length = EnumerableSetUpgradeable.length(set);
-        address[] memory output = new address[](length);
-
-        for (uint256 i; i < length; ++i) {
-            output[i] = EnumerableSetUpgradeable.at(set, i);
-        }
-
-        return output;
-    }
-
-    function checkDelegation(address _master, address _delegate) public view override returns (bool) {
-        return _master == _delegate || EnumerableSetUpgradeable.contains(_delegatesByMaster[_master], _delegate);
     }
 
     function getPositionFee(
@@ -744,6 +715,26 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
 
     function setMinimumOpenCollateral(uint256 _minimumOpenCollateral) external onlyOwner {
         minimumOpenCollateral = _minimumOpenCollateral;
+    }
+
+    function setNotAllowContractCall(bool _isNotAllow) external onlyOwner {
+        notAllowContractCall = _isNotAllow;
+    }
+
+    function setBlacklist(address _account, bool _isBlacklist) external onlyOwner {
+        isBlacklist[_account] = _isBlacklist;
+    }
+
+    function setRequiredValidateMarketSlippage(bool _requiredValidate) external onlyOwner {
+        requiredValidateMarketSlippage = _requiredValidate;
+    }
+
+    function validateCaller(address _account) override external view {
+        if (notAllowContractCall) {
+            require(!AddressUpgradeable.isContract(_account), "FBD");
+        }
+
+        require(!isBlacklist[_account], "Blacklist");
     }
 
     /*

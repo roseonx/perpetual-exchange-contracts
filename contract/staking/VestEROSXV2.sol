@@ -10,6 +10,7 @@ import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 
 import "../tokens/interfaces/IBurnable.sol";
 import "../tokens/interfaces/ILockROSX.sol";
+import "../core/interfaces/IBlacklistManager.sol";
 
 contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeMathUpgradeable for uint256;
@@ -34,7 +35,8 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
 
     mapping(address => VestingData) public vesting;
     mapping(address => bool) public whitelist;
-    uint256[49] private __gap;
+    address public blacklistManager;
+    uint256[48] private __gap;
 
     function initialize(address _claimableToken, address _esToken) public initializer {
         require(address(_claimableToken) != address(0), "zeroAddr");
@@ -50,6 +52,7 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     function deposit(uint256 _amount) external nonReentrant {
+        _validateBlacklist(msg.sender);
         require(_amount > 0, "Amount Invalid");
         bool isSuccessLock = ILockROSX(lockRosx).lock(msg.sender, _amount);
 
@@ -64,6 +67,7 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     function withdraw(uint256 _amount) external nonReentrant {
+        _validateBlacklist(msg.sender);
         require(_amount > 0, "Amount Invalid");
         _updateVesting(msg.sender);
         VestingData storage userVesting = vesting[msg.sender];
@@ -81,6 +85,7 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     function claim() external nonReentrant returns (uint256) {
+        _validateBlacklist(msg.sender);
         _updateVesting(msg.sender);
         VestingData storage userVesting = vesting[msg.sender];
         require(IERC20Upgradeable(claimableToken).transfer(msg.sender, userVesting.amountDebt), "Transfer Fail");
@@ -155,8 +160,18 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
         vestingDuration = _vestingDuration;
     }
 
+    //Old logic
     function setWhitelist(address _account, bool _isWhitelist) external onlyOwner {
         whitelist[_account] = _isWhitelist;
         emit SetWhitelist(_account, _isWhitelist);
+    }
+
+    function setBlacklistManager(address _blacklistManager) external onlyOwner {
+        blacklistManager = _blacklistManager;
+    }
+
+    //New logic
+    function _validateBlacklist(address _account) internal view {
+        IBlacklistManager(blacklistManager).validateCaller(_account);
     }
 }

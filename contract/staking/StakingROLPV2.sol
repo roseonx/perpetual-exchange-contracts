@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "./interfaces/IStakingCompoundV2.sol";
 import "../tokens//interfaces/IMintable.sol";
 import "../tokens//interfaces/IBurnable.sol";
+import "../core/interfaces/IBlacklistManager.sol";
 
 contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeMathUpgradeable for uint256;
@@ -59,7 +60,8 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     mapping(address => mapping(IERC20Upgradeable => PendingReward)) public rewardPending;
     mapping(address => bool) private permission;
     mapping(address => bool) isAddReward;
-    uint256[50] private __gap;
+    address public blacklistManager;
+    uint256[49] private __gap;
 
     function initialize(address _ROLP) public initializer {
         require(_ROLP != address(0), "zeroAddr");
@@ -137,6 +139,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     }
 
     function compound(bool[] calldata _isClaim , bool[] calldata _isCompound) external nonReentrant {
+        _validateBlacklist(msg.sender);
         uint256 amountStaked = userAmount[msg.sender];
 
         updatePool();
@@ -215,7 +218,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     }
 
     // Update reward variables of the given pool to be up-to-date.
-    function updatePool() internal  {
+    function updatePool() internal {
         //PoolInfo storage pool = poolInfo;
         if (block.timestamp <= poolInfo.lastTimeReward) {
             return;
@@ -242,6 +245,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
      * @param _amount: amount to deposit
      */
     function deposit(uint256 _amount) external nonReentrant {
+        _validateBlacklist(msg.sender);
         require(_amount > 0, "deposit: amount > 0");
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
@@ -269,6 +273,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
      * @param _amount: amount to withdraw
      */
     function withdraw(uint256 _amount) public nonReentrant {
+        _validateBlacklist(msg.sender);
         PoolInfo storage pool = poolInfo;
         uint256 amountStaked = userAmount[msg.sender];
         require(_amount > 0, "withdraw: amount > 0");
@@ -295,6 +300,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
     }
 
     function claim(bool[] calldata _isClaim) external nonReentrant {
+        _validateBlacklist(msg.sender);
         uint256 amountStaked = userAmount[msg.sender];
         updatePool();
         for (uint i = 0;  i < rewardInfo.length; i++) {
@@ -386,6 +392,7 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
     function emergencyWithdraw() public nonReentrant {
+        _validateBlacklist(msg.sender);
         PoolInfo storage pool = poolInfo;
         uint256 amountStaked = userAmount[msg.sender];
         userAmount[msg.sender] = 0;
@@ -399,5 +406,13 @@ contract StakingROLPV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUp
             pendingReward.rewardDebt = 0;
             pendingReward.rewardPending = 0;
         }
+    }
+
+    function setBlacklistManager(address _blacklistManager) external onlyOwner {
+        blacklistManager = _blacklistManager;
+    }
+
+    function _validateBlacklist(address _account) internal view {
+        IBlacklistManager(blacklistManager).validateCaller(_account);
     }
 }

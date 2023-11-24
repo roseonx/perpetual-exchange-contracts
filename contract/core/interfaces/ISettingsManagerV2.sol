@@ -2,9 +2,10 @@
 
 pragma solidity ^0.8.12;
 
+import "./IBlacklistManager.sol";
 import {Position} from "../../constants/Structs.sol";
 
-interface ISettingsManagerV2 {
+interface ISettingsManagerV2 is IBlacklistManager {
     function decreaseOpenInterest(address _token, address _sender, bool _isLong, uint256 _amount) external;
 
     function increaseOpenInterest(address _token, address _sender, bool _isLong, uint256 _amount) external;
@@ -14,8 +15,6 @@ interface ISettingsManagerV2 {
     function openInterestPerSide(bool _isLong) external view returns (uint256);
 
     function openInterestPerUser(address _sender) external view returns (uint256);
-
-    function checkDelegation(address _master, address _delegate) external view returns (bool);
 
     function closeDeltaTime() external view returns (uint256);
 
@@ -34,8 +33,6 @@ interface ISettingsManagerV2 {
     function feeRewardBasisPoints() external view returns (uint256);
 
     function getPositionFee(address _indexToken, bool _isLong, uint256 _sizeDelta) external view returns (uint256);
-
-    function getDelegates(address _master) external view returns (address[] memory);
 
     function isCollateral(address _token) external view returns (bool);
 
@@ -151,4 +148,8 @@ interface ISettingsManagerV2 {
     function disableFastExecuteForClosePosition() external view returns (bool);
 
     function minimumOpenCollateral() external view returns (uint256);
+
+    function notAllowContractCall() external view returns (bool);
+
+    function requiredValidateMarketSlippage() external view returns (bool);
 }

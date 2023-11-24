@@ -259,8 +259,11 @@ contract VaultUtilsV2 is IVaultUtilsV2, Constants, UUPSUpgradeable, OwnableUpgra
             //Stop-limit type must have both limit price and stop price > 0
             orderTypeFlag = true;
         } else if (_orderType == OrderType.MARKET) {
-            //Market type need to check slippage
-            checkSlippage(_isLong, _getFirstParams(_params), _getMarketSlippage(_params[1]), _latestTokenPrice);
+            if (settingsManager.requiredValidateMarketSlippage()) {
+                //Market type may need to check slippage
+                checkSlippage(_isLong, _getFirstParams(_params), _getMarketSlippage(_params[1]), _latestTokenPrice);
+            }
+
             orderTypeFlag = true;
         }
 

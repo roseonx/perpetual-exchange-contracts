@@ -458,6 +458,8 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     }
 
     function _transferTo(address _token, uint256 _amount, address _receiver) internal {
+        settingsManager.validateCaller(_receiver);
+
         if (_receiver != address(0) && _amount > 0) {
             uint256 minimumVaultReserve = settingsManager.minimumVaultReserves(_token);
 
@@ -544,10 +546,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
 
     function stake(address _account, address _token, uint256 _amount) external nonReentrant {
         require(settingsManager.isStaking(_token), "This token not allowed for staking");
-        require(
-            (settingsManager.checkDelegation(_account, msg.sender)) && _amount > 0,
-            "Zero amount or not allowed for stakeFor"
-        );
+        require(msg.sender == _account && _amount > 0, "Zero amount or not allowed for stakeFor");
         uint256 usdAmount = priceManager.fromTokenToUSD(_token, _amount);
         _transferFrom(_token, _account, _amount);
         uint256 usdAmountFee = (usdAmount * settingsManager.stakingFee()) / BASIS_POINTS_DIVISOR;
@@ -744,7 +743,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return tokenBalances[_token];
     }
 
-    /*
+        /*
     @dev: Let updater hotfix system amount
     */
     function updateSystemAmount(uint256 _type, uint256 _amount, address _token, bool _isPlus) external onlyOwner {
