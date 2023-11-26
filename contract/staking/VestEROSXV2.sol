@@ -44,7 +44,13 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
         claimableToken = _claimableToken;
         esToken = _esToken;
         __Ownable_init();
-        vestingDuration = 5 minutes;
+        _initVestingDuration();
+    }
+
+    function _initVestingDuration() internal {
+        if (vestingDuration == 0) {
+            vestingDuration = 180 days;
+        }
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {
@@ -173,5 +179,22 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     //New logic
     function _validateBlacklist(address _account) internal view {
         IBlacklistManager(blacklistManager).validateCaller(_account);
+    }
+
+    //Let updater fix vesting in case of emergency
+    function updateVestingDebt(address _account, uint256 _amount, bool _isPlus) external onlyOwner {
+        VestingData storage vest = vesting[_account];
+        uint256 maxAmount = vest.amountStake + vest.amountDebt + vest.amountClaimed;
+        require(_amount <= maxAmount, "Amount exceeded");
+
+        if (_isPlus) {
+            require(_amount <= vest.amountStake, "Insufficient");
+            vest.amountDebt += _amount;
+            vest.amountStake -= _amount;
+        } else {
+            require(_amount <= vest.amountDebt, "Insufficient");
+            vest.amountDebt -= _amount;
+            vest.amountStake += _amount;
+        }
     }
 }
