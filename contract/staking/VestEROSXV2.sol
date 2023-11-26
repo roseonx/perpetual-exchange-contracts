@@ -182,15 +182,17 @@ contract VestEROSXV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgr
     }
 
     //Let updater fix vesting in case of emergency
-    function updateVestingDebt(address _account, uint256 _amount, bool _isPlus) external onlyOwner {
+    function updateVestingData(address _account, uint256 _amount, bool _isPlus) external onlyOwner {
         VestingData storage vest = vesting[_account];
         uint256 maxAmount = vest.amountStake + vest.amountDebt + vest.amountClaimed;
         require(_amount <= maxAmount, "Amount exceeded");
 
         if (_isPlus) {
-            require(_amount <= vest.amountStake, "Insufficient");
-            vest.amountDebt += _amount;
-            vest.amountStake -= _amount;
+            revert("Inp");
+            // require(_amount <= vest.amountStake, "Insufficient");
+            // IBurnable(esToken).burn(address(this), _amount);
+            // vest.amountDebt += _amount;
+            // vest.amountStake -= _amount;
         } else {
             require(_amount <= vest.amountDebt, "Insufficient");
             vest.amountDebt -= _amount;
