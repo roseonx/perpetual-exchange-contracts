@@ -5,7 +5,6 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
@@ -104,7 +103,7 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
     event IncreaseCodeStat(bytes32 code, uint256 discountShareAmount, uint256 rebateAmount, uint256 esROSXRebateAmount);
     event FixCodeStat(bytes32 code, uint256 newTotalDiscountshare, uint256 newTotalRebate, uint256 newTotalEsROSXRebate);
     event ConvertRUSD(address recipient, address tokenOut, uint256 rUSD, uint256 amountOut, uint256 timestamp);
-    event ReferralDelievered(address _account, bytes32 code, address referrer, uint256 amount);
+    event ReferralDelivered(address _account, bytes32 code, address referrer, uint256 amount);
     event EscrowRebateDelivered(
         address referrer,
         uint256 esRebateAmount,
@@ -614,8 +613,8 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         TIER_TYPE _tierType,
         uint256 _tier
     ) internal returns (uint256, uint256) {
-        require(address(rUSD) != address(0), "Invalid rUSD");
-        require(address(esROSX) != address(0), "Invalid esROSX");
+        require(address(rUSD) != address(0), "Invalid init rUSD");
+        require(address(esROSX) != address(0), "Invalid init esROSX");
         address recipient = _referrer == address(0) ? settingsManager.getFeeManager() : _referrer;
         require(recipient != address(0), "Invalid recipient");
         uint256 rebatePercentage = _getRebatePercentage(_tierType, _tier);
@@ -623,7 +622,7 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
         if (rebateAmount > 0) {
             IMintable(rUSD).mint(recipient, rebateAmount);
-            emit ReferralDelievered(_account, _code, recipient, rebateAmount);
+            emit ReferralDelivered(_account, _code, recipient, rebateAmount);
         }
 
         uint256 mintEsROSXAmount;
@@ -637,9 +636,23 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
                 if (mintEsROSXAmount > 0) {
                     try IMintable(esROSX).mint(recipient, mintEsROSXAmount) {
-                        emit EscrowRebateDelivered(recipient, esRebateAmount, rosxPrice, mintEsROSXAmount, true, string(new bytes(0)));
+                        emit EscrowRebateDelivered(
+                            recipient,
+                            esRebateAmount,
+                            rosxPrice,
+                            mintEsROSXAmount,
+                            true,
+                            string(new bytes(0))
+                        );
                     } catch (bytes memory err) {
-                        emit EscrowRebateDelivered(recipient, esRebateAmount, rosxPrice, mintEsROSXAmount, false, _getRevertMsg(err));
+                        emit EscrowRebateDelivered(
+                            recipient,
+                            esRebateAmount,
+                            rosxPrice,
+                            mintEsROSXAmount,
+                            false,
+                            _getRevertMsg(err)
+                        );
                     }
                 }
             }
