@@ -334,7 +334,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) external override {
         bool isPositionHandler = msg.sender == positionHandler;
-        require(isPositionHandler, "Forbidden");
+        require(isPositionHandler || msg.sender == address(referralSystem), "Forbidden");
         address referrer;
         uint256 discountFee;
         uint256 rebatePercentage;
