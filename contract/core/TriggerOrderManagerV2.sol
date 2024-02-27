@@ -19,7 +19,7 @@ import {Position, TriggerStatus, TriggerOrder} from "../constants/Structs.sol";
 contract TriggerOrderManagerV2 is ITriggerOrderManagerV2, BasePositionV2, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     IPositionRouterV2 public positionRouter;
     mapping(bytes32 => TriggerOrder) public triggerOrders;
-    uint256 public isNotAllowContractCall; //Reserve
+    uint256 public isNotAllowContractCall; //Deprecated
     uint256[49] private __gap;
 
     event FinalInitialized(
@@ -154,6 +154,7 @@ contract TriggerOrderManagerV2 is ITriggerOrderManagerV2, BasePositionV2, UUPSUp
     }
 
     function updateTriggerOrders(
+        address _account,
         address _indexToken,
         bool _isLong,
         uint256 _posId,
@@ -164,20 +165,26 @@ contract TriggerOrderManagerV2 is ITriggerOrderManagerV2, BasePositionV2, UUPSUp
         uint256[] memory _tpTriggeredAmounts,
         uint256[] memory _slTriggeredAmounts
     ) external payable nonReentrant {
-        bytes32 key = _getPositionKey(msg.sender, _indexToken, _isLong, _posId);
-        Position memory position = positionKeeper.getPosition(msg.sender, _indexToken, _isLong, _posId);
+        _checkDelegation(_account);
+        bytes32 key = _getPositionKey(_account, _indexToken, _isLong, _posId);
+        Position memory position = positionKeeper.getPosition(_account, _indexToken, _isLong, _posId);
         require(position.size > 0, "Zero positionSize");
-        require(position.owner == msg.sender, "Invalid positionOwner");
+        require(position.owner == _account, "Invalid positionOwner");
         payable(settingsManager.getFeeManager()).transfer(msg.value);
         (bool isFastExecute, uint256 indexPrice) = _getPriceAndCheckFastExecute(_indexToken);
-        require(_validateTriggerOrdersData(
-                _isLong,
-                indexPrice,
-                _tpPrices,
-                _slPrices,
-                _tpTriggeredAmounts,
-                _slTriggeredAmounts), 
-        "Invalid triggerData");
+
+        if (isFastExecute) {
+            //Validate trigger if is fast execute
+            require(_validateTriggerOrdersData(
+                    _isLong,
+                    indexPrice,
+                    _tpPrices,
+                    _slPrices,
+                    _tpTriggeredAmounts,
+                    _slTriggeredAmounts), 
+            "Invalid triggerData");
+        }
+
         uint256 maxTriggerPriceLength = settingsManager.maxTriggerPriceLength();
 
         if (maxTriggerPriceLength > 0 && ((_tpPrices.length + _slPrices.length) > 0)) {
@@ -344,12 +351,11 @@ contract TriggerOrderManagerV2 is ITriggerOrderManagerV2, BasePositionV2, UUPSUp
         return true;
     }
 
-    function setNotAllowContractCall(uint256 _notAllowContractCall) external onlyOwner {
-        isNotAllowContractCall = _notAllowContractCall > 0 ? 1 : 0;
-        emit SetNotAllowContractCall(isNotAllowContractCall);
-    }
-
-    function _isNotAllowContractCall() internal view returns (bool) {
-        return isNotAllowContractCall != 0;
+    function _checkDelegation(address _account) internal {
+        settingsManager.checkDelegation(
+            _account,
+            msg.sender,
+            true
+        );
     }
 }
