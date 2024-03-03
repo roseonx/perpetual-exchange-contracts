@@ -14,12 +14,12 @@ async function deploy() {
 	let contractNameArr = contractName.split("_");
 	let exactContractName = contractNameArr[0];
 
-	if (exactContractName === "TradingWETH" 
-		|| exactContractName === "TradingBTC" 
-		|| exactContractName === "TradingMATIC" 
-		|| exactContractName === "TradingBNB" 
-		|| exactContractName === "TradingARB" 
-		|| exactContractName === "StableUSDC" 
+	if (exactContractName === "WETH" 
+		|| exactContractName === "WBTC" 
+		|| exactContractName === "WMATIC" 
+		|| exactContractName === "WBNB" 
+		|| exactContractName === "ARB" 
+		|| exactContractName === "USDC.e" 
 		|| exactContractName === "CollateralBLUR") {
 		exactContractName = "TestERC20";
 	}

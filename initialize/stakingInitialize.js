@@ -8,8 +8,8 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	let rewardMap = new Map();
 	rewardMap.set(contractMap.get("ROSX"), "10000000000000000");
-	rewardMap.set(contractMap.get("EROSX"), "20000000000000000");
-	rewardMap.set(contractMap.get("StableUSDC"), "200");
+	rewardMap.set(contractMap.get("eROSX"), "20000000000000000");
+	rewardMap.set(contractMap.get("USDC.e"), "200");
 
 	contract = "StakingDual";
 	//
@@ -40,8 +40,8 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	}
 
 	rewardMap = new Map();
-	rewardMap.set(contractMap.get("EROSX"), "20000000000000000");
-	rewardMap.set(contractMap.get("StableUSDC"), "300");
+	rewardMap.set(contractMap.get("eROSX"), "20000000000000000");
+	rewardMap.set(contractMap.get("USDC.e"), "300");
 	contract = "StakingROLP";
 	//
 	for (let asset of rewardMap.keys()) {
@@ -198,7 +198,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 		console.log(`Error on ${functionName} ff ${asset} err ${err}`);
 	}
 
-	contract = "EROSX";
+	contract = "eROSX";
 	//
 	try {
 		functionName = "setMinter";

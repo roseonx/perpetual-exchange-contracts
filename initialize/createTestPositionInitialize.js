@@ -7,11 +7,11 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	let signed = {};
 
 	let tradingAssets = [
-		contractMap.get("TradingWETH"),
-		contractMap.get("TradingBTC"),
-		contractMap.get("TradingBNB"),
-		contractMap.get("TradingMATIC"),
-		contractMap.get("TradingARB")
+		contractMap.get("WETH"),
+		contractMap.get("WBTC"),
+		contractMap.get("WBNB"),
+		contractMap.get("WMATIC"),
+		contractMap.get("ARB")
 	];
 	
 	for (let asset of tradingAssets) {
@@ -46,12 +46,12 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	}
 
 	let assetPriceMap = new Map();
-	assetPriceMap.set(contractMap.get("StableUSDC"), "1000000000000000000");
-	//assetPriceMap.set(contractMap.get("TradingWETH"), "1940000000000000000000");
-	// //assetPriceMap.set(contractMap.get("TradingBTC"), "30000000000000000000000");
-	// // assetPriceMap.set(contractMap.get("TradingMATIC"), "800000000000000000");
-	// // assetPriceMap.set(contractMap.get("TradingBNB"), "330000000000000000000");
-	// // assetPriceMap.set(contractMap.get("TradingARB"), "1200000000000000000");
+	assetPriceMap.set(contractMap.get("USDC.e"), "1000000000000000000");
+	//assetPriceMap.set(contractMap.get("WETH"), "1940000000000000000000");
+	// //assetPriceMap.set(contractMap.get("WBTC"), "30000000000000000000000");
+	// // assetPriceMap.set(contractMap.get("WMATIC"), "800000000000000000");
+	// // assetPriceMap.set(contractMap.get("WBNB"), "330000000000000000000");
+	// // assetPriceMap.set(contractMap.get("ARB"), "1200000000000000000");
 	// // assetPriceMap.set(contractMap.get("CollateralBLUR"), "400000000000000000");
 
 	//Set latest prices
@@ -90,7 +90,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	// 	encodeParams = abi.encodeParameters(["address", "address", "uint256"], 
 	// 		[
 	// 			account.address, 
-	// 			contractMap.get("StableUSDC"),
+	// 			contractMap.get("USDC.e"),
 	// 			10000000
 	// 		]);
 	// 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
@@ -116,7 +116,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	let openAssetMap = new Map();
 
 	for (let asset of assetPriceMap.keys()) {
-		if (asset !== contractMap.get("StableUSDC") && asset !== contractMap.get("CollateralBLUR")) {
+		if (asset !== contractMap.get("USDC.e") && asset !== contractMap.get("CollateralBLUR")) {
 			openAssetMap.set(asset, assetPriceMap.get(asset));
 		}
 	}
@@ -146,7 +146,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 						],
 						[
 							asset,
-							contractMap.get("StableUSDC")
+							contractMap.get("USDC.e")
 						]
 					]);
 				data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
@@ -192,8 +192,8 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 						10000000 * i,
 					],
 					[
-						contractMap.get("TradingWETH"),
-						contractMap.get("StableUSDC")
+						contractMap.get("WETH"),
+						contractMap.get("USDC.e")
 					]
 				]);
 			data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
@@ -263,8 +263,8 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	// 				"1692497698"
 	// 			],
 	// 			[
-	// 				contractMap.get("TradingWETH"),
-	// 				contractMap.get("StableUSDC")
+	// 				contractMap.get("WETH"),
+	// 				contractMap.get("USDC.e")
 	// 			],
 	// 		]);
 	// 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);

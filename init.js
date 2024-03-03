@@ -135,12 +135,12 @@ async function baseDeployAndVerify(contractMap) {
 	let contractsToDeploy = [
 		"ROLP",
 		"RUSD",
-		"TradingWETH",
-		"TradingBTC",
-		"TradingMATIC",
-		"TradingBNB",
-		"TradingARB",
-		"StableUSDC",
+		"WETH",
+		"WBTC",
+		"WMATIC",
+		"WBNB",
+		"ARB",
+		"USDC.e",
 		"CollateralBLUR",
 		"DummyChainlinkAggregator_WETH",
 		"DummyChainlinkAggregator_BTC",
@@ -220,17 +220,17 @@ function getContractArgs(contractMap, contract) {
 		return [contractMap.get("Vault"), contractMap.get("SettingsManager"), contractMap.get("PriceManager")];
 	} else if (contract === "PriceManager") {
 		return [contractMap.get("RUSD"), contractMap.get("VaultPriceFeed")];
-	} else if (contract === "TradingWETH") {
+	} else if (contract === "WETH") {
 		return ["WETH", 18];
-	} else if (contract === "TradingBTC") {
+	} else if (contract === "WBTC") {
 		return ["BTC", 18];
-	} else if (contract === "TradingMATIC") {
+	} else if (contract === "WMATIC") {
 		return ["MATIC", 18];
-	} else if (contract === "TradingBNB") {
+	} else if (contract === "WBNB") {
 		return ["BNB", 18]; 
-	} else if (contract === "TradingARB") {
+	} else if (contract === "ARB") {
 		return ["ARB", 18];
-	} else if (contract === "StableUSDC") {
+	} else if (contract === "USDC.e") {
 		return ["USDC", 6];
 	} else if (contract === "CollateralBLUR") {
 		return ["BLUR", 18];
@@ -256,12 +256,12 @@ function getContractArgs(contractMap, contract) {
 		let tmp = contract.split("_");
 		return tmp.length > 1 ? tmp[tmp.length - 1] : tmp[0];
 	} else if (contract === "StakingDual") {
-		return [contractMap.get("ROSX"), contractMap.get("EROSX")];
+		return [contractMap.get("ROSX"), contractMap.get("eROSX")];
 	} else if (contract.includes("StakedTracker")) {
 		let tmp = contract.split("_");
 		return ["Staked " + tmp[1].substring(1), tmp[1]];
 	} else if (contract === "VestERosx") {
-		return [contractMap.get("ROSX"), contractMap.get("EROSX")];
+		return [contractMap.get("ROSX"), contractMap.get("eROSX")];
 	} else if (contract === "StakingROLP") {
 		return [contractMap.get("ROLP")];
 	}

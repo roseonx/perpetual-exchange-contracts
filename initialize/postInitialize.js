@@ -8,12 +8,12 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	//Set token config
 	let addressConfigMap = new Map();
-	addressConfigMap.set(contractMap.get("TradingWETH"), {decimal: 18, leverage: 500000});
-	addressConfigMap.set(contractMap.get("TradingBTC"), {decimal: 18, leverage: 500000});
-	addressConfigMap.set(contractMap.get("TradingMATIC"), {decimal: 18, leverage: 500000});
-	addressConfigMap.set(contractMap.get("TradingBNB"), {decimal: 18, leverage: 500000});
-	addressConfigMap.set(contractMap.get("TradingARB"), {decimal: 18, leverage: 500000});
-	addressConfigMap.set(contractMap.get("StableUSDC"), {decimal: 6, leverage: 10001});
+	addressConfigMap.set(contractMap.get("WETH"), {decimal: 18, leverage: 500000});
+	addressConfigMap.set(contractMap.get("WBTC"), {decimal: 18, leverage: 500000});
+	addressConfigMap.set(contractMap.get("WMATIC"), {decimal: 18, leverage: 500000});
+	addressConfigMap.set(contractMap.get("WBNB"), {decimal: 18, leverage: 500000});
+	addressConfigMap.set(contractMap.get("ARB"), {decimal: 18, leverage: 500000});
+	addressConfigMap.set(contractMap.get("USDC.e"), {decimal: 6, leverage: 10001});
 	addressConfigMap.set(contractMap.get("CollateralBLUR"), {decimal: 18, leverage: 10001});
 
 	for (let address of addressConfigMap.keys()) {

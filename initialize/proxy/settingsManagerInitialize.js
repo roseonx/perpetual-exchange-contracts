@@ -74,7 +74,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	functionName = "setEnableStable";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(address,bool)");
-	encodeParams = abi.encodeParameters(["address", "bool"], [contractMap.get("StableUSDC"), "true"]);
+	encodeParams = abi.encodeParameters(["address", "bool"], [contractMap.get("USDC.e"), "true"]);
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),
@@ -114,7 +114,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	//
 	functionName = "setEnableStaking";
 	functionSignature = abi.encodeFunctionSignature(functionName + "(address,bool)");
-	encodeParams = abi.encodeParameters(["address", "bool"], [contractMap.get("StableUSDC"), "true"]);
+	encodeParams = abi.encodeParameters(["address", "bool"], [contractMap.get("USDC.e"), "true"]);
 	data = functionSignature + (encodeParams.length > 2 ? encodeParams.substring(2, encodeParams.length) : encodeParams);
 	transaction = {
 		to: contractMap.get(contract),
@@ -196,10 +196,10 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 
 	let assets = [
 		contractMap.get("TradingWETH"),
-		contractMap.get("TradingBTC"),
-		contractMap.get("TradingMATIC"),
-		contractMap.get("TradingBNB"),
-		contractMap.get("TradingARB")
+		contractMap.get("WBTC"),
+		contractMap.get("WMATIC"),
+		contractMap.get("WBNB"),
+		contractMap.get("ARB")
 	];
 
 	for (let asset of assets) {

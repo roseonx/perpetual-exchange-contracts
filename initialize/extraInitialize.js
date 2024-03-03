@@ -10,7 +10,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	let addresses = [
 		contractMap.get("RUSD"), 
 		contractMap.get("ROLP"), 
-		contractMap.get("EROSX")
+		contractMap.get("eROSX")
 	];
 
 	for (let i = 0; i < addresses.length; i++) {
@@ -36,7 +36,7 @@ const initialize =	async function inittialize(resMap, contractMap, contract, web
 	
 	//Approve
 	addresses = [
-		contractMap.get("StableUSDC"),
+		contractMap.get("USDC.e"),
 		contractMap.get("CollateralBLUR")
 	];
 
