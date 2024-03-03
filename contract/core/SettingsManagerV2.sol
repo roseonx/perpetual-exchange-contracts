@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeab
 import "./interfaces/ISettingsManagerV2.sol";
 import "./interfaces/IPositionKeeperV2.sol";
 import "./interfaces/IVaultV2.sol";
+import "./interfaces/IDelegatorManager.sol";
 import {Constants} from "../constants/Constants.sol";
 
 contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -83,7 +84,9 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     bool public override notAllowContractCall;
     bool public override requiredValidateMarketSlippage;
     mapping(address => bool) public override isBlacklist;
-    uint256[45] private __gap;
+    uint256 public maxLiquidationFeeForRef;
+    address public delegatorManager;
+    uint256[44] private __gap;
 
     event FinalInitialized(
         address RUSD,
@@ -138,10 +141,14 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         _;
     }
 
-    function initialize(address _RUSD) public reinitializer(2) {
+    function initialize(address _RUSD) public initializer {
         require(AddressUpgradeable.isContract(_RUSD), "RUSD invalid");
         __Ownable_init();
         RUSD = _RUSD;
+        //_initSettings();
+    }
+
+    function _initSettings() internal {
         _setMaxFundingRate(MAX_FUNDING_RATE);
         marketOrderEnabled = true;
         isEnableNonStableCollateral = false;
@@ -151,11 +158,11 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
         maxProfitPercent = 10000; //10%
         positionDefaultSlippage = BASIS_POINTS_DIVISOR / 200; // 0.5%
         stakingFee = 300; // 0.3%
-        feeRewardBasisPoints = 50000; // 50%
         depositFee = 300; // 0.3%
         delayDeltaTime = 1 minutes;
-        cooldownDuration = 3 hours;
         priceMovementPercent = 500; // 0.5%
+        // feeRewardBasisPoints = 50000; // 50%
+        // cooldownDuration = 3 hours;
     }
 
     function finalInitialize(
@@ -742,5 +749,30 @@ contract SettingsManagerV2 is ISettingsManagerV2, Constants, Initializable, UUPS
     */
     function setOpenInterestPerAssetPerSide(address _token, bool _isLong, uint256 _amount) external onlyOwner {
         openInterestPerAssetPerSide[_token][_isLong] = _amount;
+    }
+    
+    function setDelegatorManager(address _delegatorManager) external onlyOwner {
+        delegatorManager = _delegatorManager;
+    }
+
+    function checkDelegation(
+        address _account,
+        address _delegatee,
+        bool _raise
+    ) external view returns (bool) {
+        require(!AddressUpgradeable.isContract(_account) 
+            && !AddressUpgradeable.isContract(_delegatee), "FBD");
+
+        if (_account == _delegatee) {
+            return true;
+        }
+
+        bool res = IDelegatorManager(delegatorManager).checkDelegation(_account, _delegatee);
+
+        if (_raise && !res) {
+            revert("Not delegatee");
+        }
+
+        return res;
     }
 }
