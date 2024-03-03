@@ -57,7 +57,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
 
     RewardInfo[] public rewardInfo;
     IERC20Upgradeable public ROSX;
-    IERC20Upgradeable public EROSX;
+    IERC20Upgradeable public eROSX;
     address public stakeTracker;
     address public feeAddr; 
     uint256 public claimFee;
@@ -76,7 +76,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         require(address(_ROSX) != address(0) && address(_EROSX) != address(0), "zeroAddr");
         ROSX = IERC20Upgradeable(_ROSX);
         addrStake[address(_ROSX)] = 1;
-        EROSX = IERC20Upgradeable(_EROSX);
+        eROSX = IERC20Upgradeable(_EROSX);
         addrStake[address(_EROSX)] = 2;
         __Ownable_init();
     }
@@ -174,7 +174,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
                     } else {
                         user.amountERosx = user.amountERosx.add(pendingReward.rewardPending).add(pending);
                         pool.totalStakeERosx = pool.totalStakeERosx.add(pendingReward.rewardPending).add(pending);
-                        emit Deposit(msg.sender, address(EROSX), pendingReward.rewardPending.add(pending));
+                        emit Deposit(msg.sender, address(eROSX), pendingReward.rewardPending.add(pending));
                         pendingReward.rewardPending = 0;
                     }
                 } else if(_isClaim[i]) {
@@ -294,10 +294,10 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             poolInfo.totalStakeRosx = poolInfo.totalStakeRosx.add(_amount);
             emit Deposit(msg.sender, address(ROSX), _amount);
         } else {
-            EROSX.safeTransferFrom(address(msg.sender), address(this), _amount);
+            eROSX.safeTransferFrom(address(msg.sender), address(this), _amount);
             user.amountERosx = user.amountERosx.add(_amount);
             poolInfo.totalStakeERosx = poolInfo.totalStakeERosx.add(_amount);
-            emit Deposit(msg.sender, address(EROSX), _amount);
+            emit Deposit(msg.sender, address(eROSX), _amount);
         }
         
     }
@@ -329,7 +329,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         } else {
             user.amountERosx = user.amountERosx.add(_amount);
             poolInfo.totalStakeERosx = poolInfo.totalStakeERosx.add(_amount);
-            emit Deposit(addr, address(EROSX), _amount);
+            emit Deposit(addr, address(eROSX), _amount);
         }
         return true;
     }
@@ -366,10 +366,10 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
             pool.totalStakeRosx = pool.totalStakeRosx.sub(_amount);
             emit Withdraw(msg.sender, address(ROSX), _amount);
         } else {
-            EROSX.safeTransfer(address(msg.sender), _amount);
+            eROSX.safeTransfer(address(msg.sender), _amount);
             user.amountERosx = user.amountERosx.sub(_amount);
             pool.totalStakeERosx = pool.totalStakeERosx.sub(_amount);
-            emit Withdraw(msg.sender, address(EROSX), _amount);
+            emit Withdraw(msg.sender, address(eROSX), _amount);
         }
     }
 
@@ -520,7 +520,7 @@ contract StakingDualTokenV2 is OwnableUpgradeable, ReentrancyGuardUpgradeable, U
         UserInfo storage user = userInfo[msg.sender];
 
         ROSX.safeTransfer(address(msg.sender), (user.amountRosx -user.lock));
-        EROSX.safeTransfer(address(msg.sender), user.amountERosx);
+        eROSX.safeTransfer(address(msg.sender), user.amountERosx);
 
         IBurnable(stakeTracker).burn(address(msg.sender), user.amountRosx - user.lock + user.amountERosx);
 

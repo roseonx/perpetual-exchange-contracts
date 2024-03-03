@@ -357,11 +357,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) external override {
         bool isPositionHandler = msg.sender == positionHandler;
-<<<<<<< Updated upstream
-        require(isPositionHandler, "Forbidden");
-=======
-        require(isPositionHandler || msg.sender == swapRouter || msg.sender == address(referralSystem), "Forbidden");
->>>>>>> Stashed changes
+        require(isPositionHandler || msg.sender == address(referralSystem), "Forbidden");
         address referrer;
         uint256 rebatePercentage;
         uint256 esRebatePercentage;
@@ -854,11 +850,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             );
         }
 
-<<<<<<< Updated upstream
-    // function getBondAmount(bytes32 _key, uint256 _txType) external override view returns (uint256) {
-    //     return bonds[_key][_txType].amount;
-    // }
-=======
         return (
             discountSharePercentage,
             rebatePercentage,
@@ -866,5 +857,4 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             referrer
         );
     }
->>>>>>> Stashed changes
 }
