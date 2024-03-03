@@ -20,8 +20,10 @@ interface IVaultV2 {
 
     function distributeFee(
         bytes32 _key, 
+        uint256 _fee,
         address _account, 
-        uint256 _fee
+        bool _isApplyDiscountFee,
+        bool _isApplyRebate
     ) external;
 
     function takeAssetIn(
@@ -47,9 +49,11 @@ interface IVaultV2 {
         uint256 _txType
     ) external;
 
-    function decreaseBond(bytes32 _key, address _account, uint256 _txType) external;
-
-    function transferBounty(address _account, uint256 _amount) external;
+    function decreaseBond(
+        bytes32 _key,
+        address _account,
+        uint256 _txType
+    ) external;
 
     function ROLP() external view returns(address);
 
