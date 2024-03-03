@@ -44,7 +44,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         address positionRouter,
         address positionKeeper
     );
-    event SyncPriceOutdated(bytes32 key, uint256 txType, address[] path);
+    event PositionInProcessing(bytes32 key, uint256 timestamp);
 
     modifier notInProcess(bytes32 key) {
         require(!processing[key], "InP"); //In processing
@@ -316,7 +316,8 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         bytes32[] memory _keys, 
         uint256[] memory _txTypes
     ) external {
-        require(_keys.length == _txTypes.length && _keys.length > 0, "IVLARL"); //Invalid array length
+        require(_keys.length > 0 && _tokens.length > 0 
+            && _keys.length == _txTypes.length && _tokens.length == _prices.length, "IVLARL"); //Invalid array length
         priceManager.setLatestPrices(_tokens, _prices);
         _validateExecutor(msg.sender);
 
@@ -324,9 +325,10 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             address[] memory path = positionRouter.getExecutePath(_keys[i], _txTypes[i]);
 
             if (path.length > 0) {
-                (uint256[] memory prices, bool isLastestSync) = priceManager.getLatestSynchronizedPrices(path);
-
-                if (isLastestSync && !processing[_keys[i]]) {
+                require(_tokens.length >= path.length, "IVLARL/TvP"); //Invalid array length, token vs path
+                uint256[] memory prices = _prices.length == path.length ? _prices : _extractPathPrices(_tokens, path, _prices);
+                
+                if (!processing[_keys[i]]) {
                     try positionRouter.execute(_keys[i], _txTypes[i], prices) {}
                     catch (bytes memory err) {
                         positionRouter.revertExecution(
@@ -338,7 +340,7 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
                         );
                     }
                 } else {
-                    emit SyncPriceOutdated(_keys[i], _txTypes[i], path);
+                    emit PositionInProcessing(_keys[i], block.timestamp);
                 }
             }
         }
@@ -644,7 +646,13 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         }
 
         vault.decreasePoolAmount(_collateralToken, fee);
-        vault.transferBounty(settingsManager.feeManager(), fee);
+        vault.distributeFee(
+            _key,
+            fee,
+            _position.owner,
+            false, //isApplyDiscountFee = false
+            true //isApplyRebate = true
+        );
         settingsManager.decreaseOpenInterest(_position.indexToken, _position.owner, _position.isLong, _position.size);
         positionKeeper.emitLiquidatePositionEvent(_key, _indexPrice, fee);
     }
@@ -755,14 +763,19 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
             vault.takeAssetOut(
                 _key,
                 _position.owner, 
-                fee, //fee
-                usdOut, //usdOut
+                fee,
+                usdOut,
                 _collateralToken, 
                 _collateralPrice
             );
         } else if (fee > 0) {
-            //Distribute fee
-            vault.distributeFee(_key, _position.owner, fee);
+            vault.distributeFee(
+                _key,
+                fee,
+                _position.owner,
+                false, //isApplyDiscountFee = false
+                false //isApplyRebate = false
+            );
         }
     }
 
@@ -862,5 +875,32 @@ contract PositionHandlerV2 is PositionConstants, IPositionHandlerV2, BaseExecuto
         }
 
         return (isFastExecute, isNewPosition, params, position, order);
+    }
+
+    function _extractPathPrices(
+        address[] memory _tokens,
+        address[] memory _path,
+        uint256[] memory _tokenPrices
+    ) internal pure returns (uint256[] memory) {
+        uint256[] memory pathPrices = new uint256[](_path.length);
+
+        for (uint256 i; i < _path.length; i++) {
+            uint256 startIndex = 0;
+
+            while (pathPrices[i] == 0 && startIndex < _tokens.length) {
+                if (_path[i] == _tokens[startIndex]) {
+                    pathPrices[i] = _tokenPrices[startIndex];
+                }
+
+                startIndex++;
+            }
+        }
+
+        //Double check price must not be zero
+        for (uint256 i; i < pathPrices.length; i++) {
+            require(pathPrices[i] > 0, "IVLTP"); //Invalid tokenPrice
+        }
+
+        return pathPrices;
     }
 }

@@ -87,31 +87,68 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
     );
     event SetHandler(address handler, bool isActive);
     event SetTraderReferralCode(address account, bytes32 code);
-    event SetStandardTier(uint256 tierId, uint256 rebatePercentage, uint256 discountSharePercentage);
-    event SetPremiumTier(uint256 tierId, uint256 rebatePercentages, uint256 esRebatePercentages, uint256 discountSharePercentage);
-    event SetReferrerTier(address referrer, TIER_TYPE tierType, uint256 tierId);
+    event SetStandardTier(
+        uint256 tierId,
+        uint256 rebatePercentage,
+        uint256 discountSharePercentage
+    );
+    event SetPremiumTier(
+        uint256 tierId,
+        uint256 rebatePercentages,
+        uint256 esRebatePercentages,
+        uint256 discountSharePercentage
+    );
+    event SetReferrerTier(
+        address referrer,
+        TIER_TYPE tierType,
+        uint256 tierId
+    );
     event RemoveReferrerTier(address referrer);
     event RegisterCode(address account, bytes32 code);
-    event ChangeCodeOwner(address account, address newAccount, bytes32 code);
-
+    event ChangeCodeOwner(
+        address account,
+        address newAccount,
+        bytes32 code
+    );
     event DeactivateTier(TIER_TYPE tierType, uint256 tierId);
     event SetCodeBlacklist(bytes32[] codes, bool[] isBlacklist);
     event SetOwnerBlacklist(address[] owners, bool[] isBlacklist);
     event SetMaxCodePerOwner(uint256 maxCodePerOwner);
     event SetAllowOverrideCode(bool isAllowOverrideCode);
     event SetNonStableMaxPriceUpdatedDelay(uint256 _nonStableMaxPriceUpdatedDelay);
-    event IncreaseCodeStat(bytes32 code, uint256 discountShareAmount, uint256 rebateAmount, uint256 esROSXRebateAmount);
-    event FixCodeStat(bytes32 code, uint256 newTotalDiscountshare, uint256 newTotalRebate, uint256 newTotalEsROSXRebate);
-    event ConvertRUSD(address recipient, address tokenOut, uint256 rUSD, uint256 amountOut, uint256 timestamp);
-    event ReferralDelivered(address _account, bytes32 code, address referrer, uint256 amount);
+    event IncreaseCodeStat(
+        bytes32 code,
+        uint256 discountShareAmount,
+        uint256 rebateAmount,
+        uint256 esROSXRebateAmount
+    );
+    event FixCodeStat(
+        bytes32 code,
+        uint256 newTotalDiscountshare,
+        uint256 newTotalRebate,
+        uint256 newTotalEsROSXRebate
+    );
+    event ConvertRUSD(
+        address recipient,
+        address tokenOut,
+        uint256 rUSD,
+        uint256 amountOut,
+        uint256 timestamp
+    );
+    event ReferralDelivered(
+        address _account,
+        bytes32 code,
+        address referrer,
+        uint256 amount
+    );
     event EscrowRebateDelivered(
         address referrer,
         uint256 esRebateAmount,
         uint256 price,
         uint256 esROSXAmount,
         bool isSuccess, 
-        string err)
-    ;
+        string err
+    );
 
     enum TIER_TYPE {
         NONE,
@@ -146,18 +183,44 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         require(tiersType.length() > 0 
             && tiersType.length() == uint256(type(TIER_TYPE).max) + 1, "Invalid tiers type");
         initializeTiers();
-        finalInitialize(_rUSD, _ROSX, _esROSX, _settingsManager, _priceManager, _vault);
+        finalInitialize(
+            _rUSD,
+            _ROSX,
+            _esROSX,
+            _settingsManager,
+            _priceManager,
+            _vault
+        );
     }
 
-    function finalInitialize(address _rUSD, address _ROSX, address _esROSX, address _settingsManager, address _priceManager, address _vault) internal {
-        _validateInternalContracts(_rUSD, _settingsManager, _priceManager, _vault);
+    function finalInitialize(
+        address _rUSD,
+        address _ROSX,
+        address _esROSX,
+        address _settingsManager,
+        address _priceManager,
+        address _vault
+    ) internal {
+        _validateInternalContracts(
+            _rUSD,
+            _settingsManager,
+            _priceManager,
+            _vault
+        );
         rUSD = _rUSD;
         ROSX = _ROSX;
         esROSX = _esROSX;
         settingsManager = ISettingsManagerV2(_settingsManager);
         priceManager = IPriceManager(_priceManager);
         vault = IVaultV2Simplify(_vault);
-        emit FinalInitialize(_rUSD, ROSX, esROSX, _settingsManager, _priceManager, _vault);
+        emit FinalInitialize(
+            rUSD,
+            ROSX,
+            esROSX,
+            address(settingsManager),
+            address(priceManager),
+            address(vault)
+        );
     }
 
     /*
@@ -183,14 +246,27 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         emit SetHandler(_handler, _isActive);
     }
 
-    function setStandardTier(uint256 _tierId, uint256 _rebatePercentage, uint256 _discountSharePercentage) external onlyOwner {
-        _valdiateTierAttr(TIER_TYPE.STANDARD, _tierId, _rebatePercentage, _discountSharePercentage);
+    function setStandardTier(
+        uint256 _tierId,
+        uint256 _rebatePercentage,
+        uint256 _discountSharePercentage
+    ) external onlyOwner {
+        _valdiateTierAttr(
+            TIER_TYPE.STANDARD,
+            _tierId,
+            _rebatePercentage,
+            _discountSharePercentage
+        );
         StandardTier memory tier = standardTiers[_tierId];
         tier.rebatePercentage = _rebatePercentage;
         tier.discountSharePercentage = _discountSharePercentage;
         tier.isActivate = true;
         standardTiers[_tierId] = tier;
-        emit SetStandardTier(_tierId, _rebatePercentage, _discountSharePercentage);
+        emit SetStandardTier(
+            _tierId,
+            _rebatePercentage,
+            _discountSharePercentage
+        );
     }
 
     function setPremiumTier(
@@ -199,14 +275,24 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         uint256 _esRebatePercentage, 
         uint256 _discountSharePercentage
     ) external onlyOwner {
-        _valdiateTierAttr(TIER_TYPE.PREMIUM, _tierId, _rebatePercentage + _esRebatePercentage, _discountSharePercentage);
+        _valdiateTierAttr(
+            TIER_TYPE.PREMIUM,
+            _tierId,
+            _rebatePercentage + _esRebatePercentage,
+            _discountSharePercentage
+        );
         PremiumTier memory tier = premiumTiers[_tierId];
         tier.rebatePercentage = _rebatePercentage;
         tier.esRebatePercentage = _esRebatePercentage;
         tier.discountSharePercentage = _discountSharePercentage;
         tier.isActivate = true;
         premiumTiers[_tierId] = tier;
-        emit SetPremiumTier(_tierId, _rebatePercentage, _esRebatePercentage, _discountSharePercentage);
+        emit SetPremiumTier(
+            _tierId,
+            _rebatePercentage,
+            _esRebatePercentage,
+            _discountSharePercentage
+        );
     }
 
     function deactivateTier(TIER_TYPE _tierType, uint256 _tierId) external onlyAdmin {
@@ -276,13 +362,18 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
 
     function _validateTier(TIER_TYPE _tierType, uint256 _tierId) internal pure {
         require(_tierId > 0, "Invalid tierId");
-        require(uint256(_tierType) > uint256(TIER_TYPE.NONE) && uint256(_tierType) < uint256(type(TIER_TYPE).max) + 1, "Invalid tierType");
+        require(uint256(_tierType) > uint256(TIER_TYPE.NONE) 
+            && uint256(_tierType) < uint256(type(TIER_TYPE).max) + 1, "Invalid tierType");
     }
 
     /*
     @dev: Set referrer tier, revert if exist any other tiers.
     */
-    function setReferrerTier(address _referrer, TIER_TYPE _tierType, uint256 _tierId) external onlyAdmin {
+    function setReferrerTier(
+        address _referrer,
+        TIER_TYPE _tierType,
+        uint256 _tierId
+    ) external onlyAdmin {
         _validateTier(_tierType, _tierId);
 
         for (uint256 tier = 0 ; tier < uint256(type(TIER_TYPE).max); tier++) {
@@ -291,22 +382,43 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
             }
         }
 
-        _setReferrerTier(_referrer, _tierType, _tierId);
+        _setReferrerTier(
+            _referrer,
+            _tierType,
+            _tierId
+        );
     }
 
     /*
     @dev: Force set referrer tier, remove all other tiers if existed.
     */
-    function forceSetReferrerTier(address _referrer, TIER_TYPE _tierType, uint256 _tierId) external onlyAdmin {
+    function forceSetReferrerTier(
+        address _referrer,
+        TIER_TYPE _tierType,
+        uint256 _tierId
+    ) external onlyAdmin {
         _validateTier(_tierType, _tierId);
         _removeReferrerTier(_referrer);
-        _setReferrerTier(_referrer, _tierType, _tierId);
+        _setReferrerTier(
+            _referrer,
+            _tierType,
+            _tierId
+        );
     }
 
-    function _setReferrerTier(address _referrer, TIER_TYPE _tierType, uint256 _tierId) internal {
+    function _setReferrerTier(
+        address _referrer,
+        TIER_TYPE _tierType,
+        uint256 _tierId
+    ) internal {
         refTiers[_referrer][uint256(_tierType)] = _tierId;
         tierOwners[_referrer] = _tierType;
-        emit SetReferrerTier(_referrer, _tierType, _tierId);
+
+        emit SetReferrerTier(
+            _referrer,
+            _tierType,
+            _tierId
+        );
     }
 
     function removeReferrerTier(address _referrer) external onlyAdmin {
@@ -381,7 +493,11 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         return (code, referrer);
     }
 
-    function _setTraderReferralCode(address _account, bytes32 _refCode, bool _isAllowOverrideCode) private {
+    function _setTraderReferralCode(
+        address _account,
+        bytes32 _refCode,
+        bool _isAllowOverrideCode
+    ) private {
         bytes32 prevCode = traderReferralCode[_account];
         require(prevCode != _refCode, "Prev and current refCode are same");
 
@@ -397,50 +513,53 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         emit SetTraderReferralCode(_account, _refCode);
     }
 
-    function getDiscountable(address _account) external view override returns(address, uint256, uint256, uint256) {
-        address codeOwner;
-        uint256 discountPercentage;
-        uint256 rebatePercentage;
-        uint256 esRebatePercentage;
-        (
-             , //Not need refCode
-            codeOwner, 
-            , //Not need tierType 
-            , //Not need tierId
-            discountPercentage, 
-            rebatePercentage, 
-            esRebatePercentage
-        ) = _getDiscountable(_account);
-        return (codeOwner, discountPercentage, rebatePercentage, esRebatePercentage);
-    }
-
-    function getDiscountableInternal(address _account, uint256 _fee) external returns(address, uint256, uint256, uint256) {
-        return _getDiscountableInternal(_account, _fee);
-    }
-
-    function _getDiscountable(address _account) internal view returns(
-        bytes32, //refCode
-        address, //referrer
-        TIER_TYPE, //tierType
-        uint256, //tierId
-        uint256, //discountPercentage
-        uint256, //rebatePercentage
-        uint256 //esRebatePercentage
+    function getDiscountable(address _account) external view override returns (
+        uint256 discountSharePercentage, //discountSharePercentage
+        uint256 rebatePercentage, //rebatePercentage
+        uint256 esRebatePercentage, //esRebatePercentage
+        address codeOwner //referrer
     ) {
-        bytes32 refCode = traderReferralCode[_account];
+        (
+            , //Not need refCode
+            , //Not need tierId
+            discountSharePercentage, 
+            rebatePercentage, 
+            esRebatePercentage,
+            codeOwner, 
+            //Not need tierType 
+        ) = _getDiscountable(_account, true); //_isApplyDiscountFee = true
 
-        if (traderReferralCode[_account] == bytes32(0) || blacklistCodes[refCode]) {
-            return (bytes32(0), address(0), TIER_TYPE.NONE, 0, 0, 0, 0);
+        return (
+            discountSharePercentage,
+            rebatePercentage,
+            esRebatePercentage,
+            codeOwner
+        );
+    }
+
+    function _getDiscountable(
+        address _account,
+        bool _isApplyDiscountFee
+    ) internal view returns (
+        bytes32 refCode,
+        uint256 tierId,
+        uint256 discountSharePercentage, //discountSharePercentage
+        uint256, //rebatePercentage
+        uint256, //esRebatePercentage,
+        address referrer,
+        TIER_TYPE tierType
+    ) {
+        refCode = traderReferralCode[_account];
+
+        if (refCode == bytes32(0) || blacklistCodes[refCode]) {
+            return _noneTier();
         }
 
-        address referrer = codeOwners[refCode];
+        referrer = codeOwners[refCode];
 
         if (referrer == address(0) || blacklistOwners[referrer]) {
-            return (bytes32(0), address(0), TIER_TYPE.NONE, 0, 0, 0, 0);
+            return _noneTier();
         }
-
-        TIER_TYPE tierType;
-        uint256 tierId;
         
         {
             (tierType, tierId) = _getTier(referrer);
@@ -450,194 +569,220 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
                 || tierType == TIER_TYPE.NONE
                 || (tierType == TIER_TYPE.PREMIUM && !premiumTiers[tierId].isActivate) 
                 || (tierType == TIER_TYPE.STANDARD && !standardTiers[tierId].isActivate)) {
-            return (bytes32(0), address(0), TIER_TYPE.NONE, 0, 0, 0, 0);
+            return _noneTier();
         }
 
-        uint256 discountPercentage;
+        bool isPremiumTier;
 
         {
-            discountPercentage = _getDiscountPercentage(tierType, tierId);
+            discountSharePercentage = _isApplyDiscountFee ? _getdiscountSharePercentage(tierType, tierId) : 0;
+            isPremiumTier = tierType == TIER_TYPE.PREMIUM;
         }
 
-        return tierType == TIER_TYPE.PREMIUM 
-            ?   (
-                refCode,
-                referrer,
-                tierType,
-                tierId,
-                discountPercentage,
-                premiumTiers[tierId].rebatePercentage,
-                premiumTiers[tierId].esRebatePercentage
-            )
-            :  (
-                refCode,
-                referrer,
-                tierType,
-                tierId,
-                discountPercentage,
-                standardTiers[tierId].rebatePercentage,
-                0
-            );
-
-        // if (tierType == TIER_TYPE.PREMIUM) {
-        //     return (
-        //         refCode,
-        //         referrer,
-        //         tierType,
-        //         tierId,
-        //         discountPercentage,
-        //         premiumTiers[tierId].rebatePercentage,
-        //         premiumTiers[tierId].esRebatePercentage
-        //     );
-        // } else if (tierType == TIER_TYPE.STANDARD) {
-        //     return (
-        //         refCode,
-        //         referrer,
-        //         tierType,
-        //         tierId,
-        //         discountPercentage,
-        //         standardTiers[tierId].rebatePercentage,
-        //         0
-        //     );
-        // } else if (tierType == TIER_TYPE.NONE) {
-        //     //Default tierType = standard and tierId = 1
-        //     uint256 defaultTierId = 1;
-        //     return (
-        //         refCode,
-        //         referrer,
-        //         TIER_TYPE.STANDARD,
-        //         defaultTierId,
-        //         discountPercentage,
-        //         standardTiers[defaultTierId].rebatePercentage,
-        //         0
-        //     );
-        // } else {
-        //     //Reserve
-        //     return (
-        //         bytes32(0),
-        //         address(0),
-        //         TIER_TYPE.NONE,
-        //         0,
-        //         0,
-        //         0,
-        //         0
-        //     );
-        // }
+        return (
+            refCode,
+            tierId,
+            discountSharePercentage,
+            isPremiumTier ? premiumTiers[tierId].rebatePercentage : standardTiers[tierId].rebatePercentage,
+            isPremiumTier ? premiumTiers[tierId].esRebatePercentage : 0,
+            referrer,
+            tierType
+        );
     }
 
-    function _getDiscountableInternal(
+    function applyDiscount(
+        uint256 _fee,
         address _account,
-        uint256 _fee
-    ) internal returns(address, uint256, uint256, uint256) {
-        require(msg.sender == address(vault), "Forbidden");
+        bool _isApplyDiscountFee,
+        bool _isApplyRebate
+    ) external returns (
+        uint256, //discountSharePercentage
+        uint256, //rebatePercentage
+        uint256, //esRebatePercentage
+        address //referrer
+    ) {
+        require(msg.sender == address(vault), "FBD");
+
+        return _applyDiscount(
+            _fee,
+            _account,
+            _isApplyDiscountFee,
+            _isApplyRebate
+        );
+    }
+
+    function _applyDiscount(
+        uint256 _fee,
+        address _account,
+        bool _isApplyDiscountFee,
+        bool _isApplyRebate
+    ) internal returns (
+        uint256 discountSharePercentage,
+        uint256 rebatePercentage,
+        uint256 esRebatePercentage,
+        address referrer
+    ) {
         bytes32 refCode;
-        address referrer;
-        TIER_TYPE tierType;
         uint256 tierId;
-        uint256 discountPercentage;
-        uint256 rebatePercentage;
-        uint256 esRebatePercentage;
+        TIER_TYPE tierType;
 
         {
             (
                 refCode,
-                referrer,
-                tierType,
                 tierId,
-                discountPercentage,
+                discountSharePercentage,
                 rebatePercentage,
-                esRebatePercentage
-            ) = _getDiscountable(_account);
+                esRebatePercentage,
+                referrer,
+                tierType
+            ) = _getDiscountable(_account, _isApplyDiscountFee);
         }
 
         if (refCode == bytes32(0)) {
-            return (referrer, discountPercentage, rebatePercentage, esRebatePercentage); 
+            return (
+                discountSharePercentage,
+                rebatePercentage,
+                esRebatePercentage,
+                referrer
+            ); 
         }
 
-        _collectRebateAndIncreaseCodeStat(
-            _account,
-            refCode,
-            referrer,
-            _fee,
-            discountPercentage,
-            tierType,
-            tierId
-        );
-        return (referrer, discountPercentage, rebatePercentage, esRebatePercentage);
-    }
-
-    function _collectRebateAndIncreaseCodeStat(
-        address _account,
-        bytes32 _refCode,
-        address _referrer,
-        uint256 _fee,
-        uint256 _discountFeePercentage,
-        TIER_TYPE _tierType,
-        uint256 _tierId
-    ) internal {
-        uint256 feeAfterDiscount;
-        uint256 discountFee;
-        
-        {
-            discountFee = _fee * _discountFeePercentage / BASIS_POINTS_DIVISOR;
-            feeAfterDiscount = discountFee >= _fee ? 0 : _fee - discountFee;
-        }
-
-        uint256 rebateAmount;
-        uint256 mintEsROSXAmount;
+        bytes memory data;
 
         {
-            (rebateAmount, mintEsROSXAmount) = _collectRebate(
+            data = abi.encode(
                 _account,
-                _refCode,
-                _referrer,
-                feeAfterDiscount,
-                _tierType,
-                _tierId
+                referrer,
+                tierType
+            );
+            
+            (
+                rebatePercentage,
+                esRebatePercentage,
+                referrer
+            ) = _discountAndRebate(
+                refCode,
+                _fee,
+                discountSharePercentage,
+                tierId,
+                _isApplyRebate,
+                data
             );
         }
 
-        _increaseCodeStat(
-            _refCode,
-            discountFee,
-            rebateAmount,
-            mintEsROSXAmount
+        return (
+            discountSharePercentage,
+            rebatePercentage,
+            esRebatePercentage,
+            referrer
         );
     }
 
-    function _collectRebate(
-        address _account,
-        bytes32 _code,
-        address _referrer,
-        uint256 _feeAfterDiscount, 
-        TIER_TYPE _tierType,
-        uint256 _tier
-    ) internal returns (uint256, uint256) {
-        require(address(rUSD) != address(0), "Invalid init rUSD");
-        require(address(esROSX) != address(0), "Invalid init esROSX");
-        address recipient = _referrer == address(0) ? settingsManager.getFeeManager() : _referrer;
-        require(recipient != address(0), "Invalid recipient");
-        uint256 rebatePercentage = _getRebatePercentage(_tierType, _tier);
-        uint256 rebateAmount = _feeAfterDiscount == 0 ? 0 : _feeAfterDiscount * rebatePercentage / BASIS_POINTS_DIVISOR;
+    function _discountAndRebate(
+        bytes32 _refCode,
+        uint256 _fee,
+        uint256 _discountFeePercentage,
+        uint256 _tierId,
+        bool _isApplyRebate,
+        bytes memory _data
+    ) internal returns (
+        uint256 rebatePercentage,
+        uint256 esRebatePercentage,
+        address referrer
+    ) {
+        uint256 feeAfterDiscount;
+        uint256 discountFee;
 
-        if (rebateAmount > 0) {
-            IMintable(rUSD).mint(recipient, rebateAmount);
-            emit ReferralDelivered(_account, _code, recipient, rebateAmount);
+        {
+            discountFee = _fee * _discountFeePercentage / BASIS_POINTS_DIVISOR;
+            feeAfterDiscount = _fee - discountFee;
+
+            if (_isApplyRebate) {
+                (
+                    rebatePercentage,
+                    esRebatePercentage,
+                    referrer
+                ) = _collectRebateAndIncreaseCodeStat(
+                    _refCode,
+                    _fee,
+                    feeAfterDiscount,
+                    _tierId,
+                    _data
+                );
+            }
+        }
+
+        return (
+            rebatePercentage,
+            esRebatePercentage,
+            referrer
+        );
+    }
+
+    function _collectRebateAndIncreaseCodeStat(
+        bytes32 _code,
+        uint256 _fee,
+        uint256 _feeAfterDiscount, 
+        uint256 _tierId,
+        bytes memory _data
+    ) internal returns (
+        uint256, //rebatePercentage
+        uint256, //esRebatePercentage
+        address //referrer
+    ) {
+        if (_feeAfterDiscount == 0) {
+            return (0, 0, address(0));
+        }
+
+        address account;
+        address referrer;
+        TIER_TYPE tierType;
+
+        {
+            (account, referrer, tierType) = abi.decode(_data, ((address), (address), (TIER_TYPE)));
+        }
+
+        require(address(rUSD) != address(0) && address(esROSX) != address(0), "Invalid assets");
+        referrer == address(0) ? settingsManager.getFeeManager() : referrer;
+        require(referrer != address(0), "Invalid recipient");
+        uint256 rebatePercentage;
+        uint256 esRebatePercentage;
+
+        {
+            (rebatePercentage, esRebatePercentage) = _getRebatePercentage(tierType, _tierId);
+            rebatePercentage = rebatePercentage >= BASIS_POINTS_DIVISOR ? BASIS_POINTS_DIVISOR : rebatePercentage;
+            esRebatePercentage = esRebatePercentage >= BASIS_POINTS_DIVISOR ? BASIS_POINTS_DIVISOR : esRebatePercentage;
+        }
+
+        uint256 rebateAmount;
+
+        if (rebatePercentage > 0) {
+            rebateAmount = _feeAfterDiscount * rebatePercentage / BASIS_POINTS_DIVISOR;
+
+            if (rebateAmount > 0) {
+                IMintable(rUSD).mint(referrer, rebateAmount);
+                emit ReferralDelivered(
+                    account,
+                    _code,
+                    referrer,
+                    rebateAmount
+                );
+            }
         }
 
         uint256 mintEsROSXAmount;
 
-        if (_tierType == TIER_TYPE.PREMIUM) {
-            uint256 esRebateAmount = _feeAfterDiscount == 0 ? 0 : _feeAfterDiscount * premiumTiers[_tier].esRebatePercentage / BASIS_POINTS_DIVISOR;
+        if (esRebatePercentage > 0) {
+            uint256 esRebateAmount = _feeAfterDiscount * esRebatePercentage / BASIS_POINTS_DIVISOR;
 
             if (esRebateAmount > 0) {
                 uint256 rosxPrice = priceManager.getLastPrice(ROSX);
                 mintEsROSXAmount = priceManager.fromUSDToToken(ROSX, esRebateAmount, rosxPrice);
 
                 if (mintEsROSXAmount > 0) {
-                    try IMintable(esROSX).mint(recipient, mintEsROSXAmount) {
+                    try IMintable(esROSX).mint(referrer, mintEsROSXAmount) {
                         emit EscrowRebateDelivered(
-                            recipient,
+                            referrer,
                             esRebateAmount,
                             rosxPrice,
                             mintEsROSXAmount,
@@ -646,7 +791,7 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
                         );
                     } catch (bytes memory err) {
                         emit EscrowRebateDelivered(
-                            recipient,
+                            referrer,
                             esRebateAmount,
                             rosxPrice,
                             mintEsROSXAmount,
@@ -658,7 +803,19 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
             }
         }
 
-        return (rebateAmount, mintEsROSXAmount);
+        _increaseCodeStat(
+            _code,
+            _fee,
+            _feeAfterDiscount,
+            rebateAmount,
+            mintEsROSXAmount
+        );
+
+        return (
+            rebatePercentage,
+            esRebatePercentage,
+            referrer
+        );
     }
 
     function getTier(address _referrer) external view returns (TIER_TYPE, uint256) {
@@ -676,48 +833,62 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         return (tierType, refTiers[_referrer][uint256(tierType)]);
     }
 
-    function _getDiscountPercentage(TIER_TYPE _tierType, uint256 _tier) internal view returns (uint256) {
+    function _getdiscountSharePercentage(TIER_TYPE _tierType, uint256 _tier) internal view returns (uint256) {
+        uint256 discountSharePercentage;
+
         if (_tierType == TIER_TYPE.PREMIUM) {
-            return premiumTiers[_tier].discountSharePercentage;
+            discountSharePercentage = premiumTiers[_tier].discountSharePercentage;
         } else if (_tierType == TIER_TYPE.STANDARD) {
-            return standardTiers[_tier].discountSharePercentage;
+            discountSharePercentage = standardTiers[_tier].discountSharePercentage;
+        } else {
+            //Reverse
+            revert("Invalid tierType");
+        }
+
+        return discountSharePercentage > BASIS_POINTS_DIVISOR ? BASIS_POINTS_DIVISOR : discountSharePercentage;
+    }
+
+    function _getRebatePercentage(TIER_TYPE _tierType, uint256 _tier) internal view returns (uint256, uint256) {
+        if (_tierType == TIER_TYPE.PREMIUM) {
+            return (premiumTiers[_tier].rebatePercentage, premiumTiers[_tier].esRebatePercentage);
+        } else if (_tierType == TIER_TYPE.STANDARD) {
+            return (standardTiers[_tier].rebatePercentage, 0);
         } else {
             //Reverse
             revert("Invalid tierType");
         }
     }
 
-    function _getRebatePercentage(TIER_TYPE _tierType, uint256 _tier) internal view returns (uint256) {
-        if (_tierType == TIER_TYPE.PREMIUM) {
-            return premiumTiers[_tier].rebatePercentage;
-        } else if (_tierType == TIER_TYPE.STANDARD) {
-            return standardTiers[_tier].rebatePercentage;
-        } else {
-            //Reverse
-            revert("Invalid tierType");
-        }
-    }
+    function _increaseCodeStat(
+        bytes32 _code,
+        uint256 _fee,
+        uint256 _feeAfterDiscount,
+        uint256 _rebateAmount,
+        uint256 _esROSXRebateAmount
+    ) internal {
+        uint256 discountshareAmount = _fee < _feeAfterDiscount ? 0 : _fee - _feeAfterDiscount;
 
-    function increaseCodeStat(address _account, uint256 _discountshareAmount, uint256 _rebateAmount, uint256 _esROSXRebateAmount) external onlyHandler {
-        _increaseCodeStat(
-            traderReferralCode[_account],
-            _discountshareAmount,
-            _rebateAmount,
-            _esROSXRebateAmount
-        );
-    }
-
-    function _increaseCodeStat(bytes32 _code, uint256 _discountshareAmount, uint256 _rebateAmount, uint256 _esROSXRebateAmount) internal {
-        if (_code != bytes32(0)) {
+        if (_code != bytes32(0) && (discountshareAmount + _rebateAmount + _esROSXRebateAmount) > 0) {
             ReferralCodeStat storage statistic = codeStats[_code];
-            statistic.totalDiscountshare += _discountshareAmount;
+            statistic.totalDiscountshare += discountshareAmount;
             statistic.totalRebate += _rebateAmount;
             statistic.totalEsROSXRebate += _esROSXRebateAmount;
-            emit IncreaseCodeStat(_code, _discountshareAmount, _rebateAmount, _esROSXRebateAmount);
+
+            emit IncreaseCodeStat(
+                _code,
+                discountshareAmount,
+                _rebateAmount,
+                _esROSXRebateAmount
+            );
         }
     }
 
-    function fixCodeStat(bytes32 _code, uint256 _totalDiscountshare, uint256 _totalRebate, uint256 _totalEsROSXRebate) external onlyAdmin {
+    function fixCodeStat(
+        bytes32 _code,
+        uint256 _totalDiscountshare,
+        uint256 _totalRebate,
+        uint256 _totalEsROSXRebate
+    ) external onlyAdmin {
         ReferralCodeStat storage statistic = codeStats[_code];
         statistic.totalDiscountshare = _totalDiscountshare;
         statistic.totalRebate = _totalRebate;
@@ -891,5 +1062,25 @@ contract ReferralSystemV2 is OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuar
         }
 
         return abi.decode(_returnData, (string)); // All that remains is the revert string
+    }
+
+    function _noneTier() internal pure returns (
+        bytes32, //refCode
+        uint256, //tierId
+        uint256, //discountSharePercentage
+        uint256, //rebatePercentage
+        uint256, //esRebatePercentage
+        address, //referrer
+        TIER_TYPE //tierType
+    ) {
+        return (
+            bytes32(0),
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            TIER_TYPE.NONE
+        );
     }
 }

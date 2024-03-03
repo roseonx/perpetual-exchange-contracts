@@ -45,7 +45,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     IReferralSystemV2 public referralSystem;
     address public swapRouter;
     address public positionRouter;
-    address public converter; //Deprecated, not use
+    address public converter; //Deprecated
     address public vaultUtils;
 
     mapping(address => uint256) public override stakeAmounts;
@@ -55,17 +55,32 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
     mapping(bytes32 => mapping(uint256 => VaultBond)) public bonds;
     uint256[49] private __gap;
 
-    event UpdatePoolAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
-    event UpdateReservedAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
-    event UpdateGuaranteedAmount(address indexed token, uint256 amount, uint256 current, bool isPlus);
-
+    event UpdatePoolAmount(
+        address indexed token,
+        uint256 amount,
+        uint256 current,
+        bool isPlus
+    );
+    event UpdateReservedAmount(
+        address indexed token,
+        uint256 amount,
+        uint256 current,
+        bool isPlus
+    );
+    event UpdateGuaranteedAmount(
+        address indexed token,
+        uint256 amount,
+        uint256 current,
+        bool isPlus
+    );
     event DistributeFee(
         bytes32 key,
         address account,
         address refer,
-        uint256 fee
+        uint256 fee,
+        bool isApplyDiscountFee,
+        bool isApplyRebate
     );
-
     event TakeAssetIn(
         bytes32 key,
         uint256 txType,
@@ -74,7 +89,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 amount,
         uint256 amountInUSD
     );
-
     event TakeAssetOut(
         bytes32 key,
         address indexed account, 
@@ -85,7 +99,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 tokenAmountOut,
         uint256 tokenPrice
     );
-
     event TakeAssetBack(
         address indexed account, 
         uint256 amount,
@@ -93,7 +106,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         bytes32 key,
         uint256 txType
     );
-
     event ReduceBond(
         address indexed account, 
         uint256 amount,
@@ -101,10 +113,18 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         bytes32 key,
         uint256 txType
     );
-
-    event TransferBounty(address indexed account, uint256 amount);
-    event Stake(address indexed account, address token, uint256 amount, uint256 mintAmount);
-    event Unstake(address indexed account, address token, uint256 rolpAmount, uint256 amountOut);
+    event Stake(
+        address indexed account,
+        address token,
+        uint256 amount,
+        uint256 mintAmount
+    );
+    event Unstake(
+        address indexed account,
+        address token,
+        uint256 rolpAmount,
+        uint256 amountOut
+    );
     event FinalInitialized(
         address ROLP, 
         address RUSD, 
@@ -116,7 +136,11 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         address vaultUtils
     );
     event SetSwapRouter(address swapRouter);
-    event RescueERC20(address indexed recipient, address indexed token, uint256 amount);
+    event RescueERC20(
+        address indexed recipient,
+        address indexed token,
+        uint256 amount
+    );
     event SetRefferalSystem(address referralSystem);
 
     function initialize(
@@ -129,7 +153,6 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         ROLP = _ROLP;
         RUSD = _RUSD;
         converter = address(0);
-        swapRouter = address(0);
     }
 
     function finalInitialize(
@@ -334,26 +357,32 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) external override {
         bool isPositionHandler = msg.sender == positionHandler;
+<<<<<<< Updated upstream
         require(isPositionHandler, "Forbidden");
+=======
+        require(isPositionHandler || msg.sender == swapRouter || msg.sender == address(referralSystem), "Forbidden");
+>>>>>>> Stashed changes
         address referrer;
-        uint256 discountFee;
         uint256 rebatePercentage;
         uint256 esRebatePercentage;
         
-        //Apply discount from positionHandler only, re-check isPositionHandler for reservion of other cases
         if (isPositionHandler && _fee > 0 && address(referralSystem) != address(0)) {
-            uint256 discountsharePercentage;
-            (referrer, discountsharePercentage, rebatePercentage, esRebatePercentage) = referralSystem.getDiscountableInternal(_account, _fee);
+            uint256 discountPercentage;
 
-            //Apply discount fee first
-            if (discountsharePercentage > 0) {
-                discountFee = _fee * discountsharePercentage / BASIS_POINTS_DIVISOR;
+            (
+                discountPercentage,
+                rebatePercentage,
+                esRebatePercentage,
+                referrer
+            ) = _applyDiscountFee(
+                _fee,
+                _account,
+                true, //isApplyDiscountFee = true
+                true //isApplyRebate = true
+            );
 
-                if (discountFee >= _fee) {
-                    discountFee = _fee;
-                }
-
-                _fee -= discountFee;
+            if (discountPercentage > 0) {
+                _fee -= _fee * discountPercentage / BASIS_POINTS_DIVISOR;
             }
         }
 
@@ -387,18 +416,18 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         uint256 _tokenPrice
     ) internal returns (uint256) {
         require(_token != address(0) && _tokenPrice > 0, "Invalid asset");
-        uint256 usdOutAfterFee = _usdOut == 0 ? 0 : _usdOut - _fee;
-        //Force convert 1-1 if stable
-        uint256 tokenPrice = settingsManager.isStable(_token) ? PRICE_PRECISION : _tokenPrice;
-        uint256 tokenAmountOut = usdOutAfterFee == 0 ? 0 : priceManager.fromUSDToToken(_token, usdOutAfterFee, tokenPrice);
-        _transferTo(_token, tokenAmountOut, _account);
-        _decreaseTokenBalances(_token, tokenAmountOut);
-        _collectFee(
-            _fee,
-            _rebatePercentage,
-            settingsManager.getFeeManager(),
-            true
-        );
+        uint256 usdOutAfterFee = _usdOut == 0 || _fee >= _usdOut ? 0 : _usdOut - _fee;
+        uint256 tokenAmountOut = 0;
+
+        if (usdOutAfterFee > 0) {
+            //Force convert 1-1 if stable
+            uint256 tokenPrice = settingsManager.isStable(_token) ? PRICE_PRECISION : _tokenPrice;
+            tokenAmountOut = usdOutAfterFee == 0 ? 0 : priceManager.fromUSDToToken(_token, usdOutAfterFee, tokenPrice);
+            _transferTo(_token, tokenAmountOut, _account);
+            _decreaseTokenBalances(_token, tokenAmountOut);
+        }
+
+        _collectFee(_fee, _rebatePercentage, true);
 
         return tokenAmountOut;
     }
@@ -444,29 +473,18 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         }
     }
 
-    function transferBounty(address _account, uint256 _amount) external override {
-        _isPositionHandler(msg.sender, true);
-
-        if (_account != address(0) && _amount > 0) {
-            IMintable(RUSD).mint(_account, _amount);
-            emit TransferBounty(_account, _amount);
-        }
-    }
-
     function _transferFrom(address _token, address _account, uint256 _amount) internal {
         IERC20Upgradeable(_token).safeTransferFrom(_account, address(this), _amount);
     }
 
     function _transferTo(address _token, uint256 _amount, address _receiver) internal {
-        settingsManager.validateCaller(_receiver);
-
         if (_receiver != address(0) && _amount > 0) {
+            settingsManager.validateCaller(_receiver);
             uint256 minimumVaultReserve = settingsManager.minimumVaultReserves(_token);
 
             if (minimumVaultReserve > 0) {
-                uint256 vaultAvailable = IERC20Upgradeable(_token).balanceOf(address(this));
-                require(vaultAvailable >= _amount && vaultAvailable - _amount 
-                    >= minimumVaultReserve, "VREXD"); //VaultReserve exceeded
+                require(IERC20Upgradeable(_token).balanceOf(address(this)) - _amount 
+                    >= minimumVaultReserve, "MVREXD"); //MinimumVaultReserve exceeded
             }
 
             IERC20Upgradeable(_token).safeTransfer(_receiver, _amount);
@@ -546,7 +564,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
 
     function stake(address _account, address _token, uint256 _amount) external nonReentrant {
         require(settingsManager.isStaking(_token), "This token not allowed for staking");
-        require(msg.sender == _account && _amount > 0, "Zero amount or not allowed for stakeFor");
+        require(_amount > 0, "Zero amount or not allowed for stakeFor");
         uint256 usdAmount = priceManager.fromTokenToUSD(_token, _amount);
         _transferFrom(_token, _account, _amount);
         uint256 usdAmountFee = (usdAmount * settingsManager.stakingFee()) / BASIS_POINTS_DIVISOR;
@@ -563,7 +581,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             mintAmount = (usdAmountAfterFee * totalRolp) / totalUsd;
         }
 
-        _collectFeeNonRebate(usdAmountFee, settingsManager.getFeeManager(), false);
+        _collectFee(usdAmountFee, 0, false);
         require(mintAmount > 0, "Staking amount too low");
         IROLP(ROLP).mintWithCooldown(_account, mintAmount, block.timestamp + settingsManager.cooldownDuration());
         _increaseTokenBalances(_token, _amount);
@@ -589,7 +607,7 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
 
         _decreaseTokenBalances(_tokenOut, amountOutInToken);
         _decreasePoolAmount(_tokenOut, usdAmountAfterFee);
-        _collectFeeNonRebate(usdAmountFee, settingsManager.getFeeManager(), false);
+        _collectFee(usdAmountFee, 0, false);
         require(IERC20Upgradeable(_tokenOut).balanceOf(address(this)) >= amountOutInToken, "Insufficient");
         _transferTo(_tokenOut, amountOutInToken, _receiver);
         stakeAmounts[_tokenOut] -= usdAmountAfterFee;
@@ -604,34 +622,58 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return IERC20Upgradeable(RUSD).totalSupply();
     }
 
-    function distributeFee(bytes32 _key, address _account, uint256 _fee) external override {
-        _isPositionHandler(msg.sender, true);
-        address feeManager = settingsManager.feeManager();
-        _collectFeeNonRebate(_fee, feeManager, true);
-
-        if (_fee > 0) {
-            emit DistributeFee(_key, _account, feeManager, _fee);
-        }
-    }
-
-
-    function _collectFeeNonRebate(
+    function distributeFee(
+        bytes32 _key,
         uint256 _fee,
-        address _feeManager,
-        bool _isReserve
-    ) internal {
+        address _account,
+        bool _isApplyDiscountFee,
+        bool _isApplyRebate
+    ) external override {
+        require(msg.sender == positionHandler, "FBD");
+        uint256 discountSharePercentage;
+        uint256 rebatePercentage;
+        uint256 esRebatePercentage;
+        address referrer;
+    
+        {
+            (
+                discountSharePercentage,
+                rebatePercentage,
+                esRebatePercentage,
+                referrer
+            ) = _applyDiscountFee(
+                _fee,
+                _account,
+                _isApplyDiscountFee,
+                _isApplyRebate
+            );
+
+            if (discountSharePercentage > 0) {
+                _fee -= _fee * discountSharePercentage / BASIS_POINTS_DIVISOR;
+            }
+        }
+
         _collectFee(
             _fee,
-            0,
-            _feeManager,
-            _isReserve
+            0, 
+            true
         );
+
+        if (_fee > 0) {
+            emit DistributeFee(
+                _key,
+                _account,
+                referrer,
+                _fee,
+                _isApplyDiscountFee,
+                _isApplyRebate
+            );
+        }
     }
 
     function _collectFee(
         uint256 _fee,
         uint256 _rebatePercentage,
-        address _feeManager,
         bool _isReserve
     ) internal {
         uint256 rebateAmount = _rebatePercentage == 0 ? 0 : _fee * _rebatePercentage / BASIS_POINTS_DIVISOR;
@@ -644,8 +686,9 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
             feeAfterRebate = systemFee >= feeAfterRebate ? 0 : feeAfterRebate - systemFee;
 
             if (systemFee > 0) {
-                require(_feeManager != address(0), "IVLFM"); //Invalid feeManager
-                IMintable(RUSD).mint(_feeManager, systemFee);
+                address feeManager = settingsManager.feeManager();
+                require(feeManager != address(0), "IVLFM"); //Invalid feeManager
+                IMintable(RUSD).mint(feeManager, systemFee);
             }
         }
 
@@ -698,6 +741,9 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         }
     }
 
+    function _isInternal() internal view returns (bool) {
+        return _isPosition() || _isSwapRouter(msg.sender, false);
+    }
 
     function _isPosition() internal view returns (bool) {
         return _isPositionHandler(msg.sender, false) 
@@ -724,6 +770,15 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return res;
     }
 
+    function _isSwapRouter(address _caller, bool _raise) internal view returns (bool) {
+        bool res = _caller == address(swapRouter);
+
+        if (_raise && !res) {
+            revert("FBD: Not swapRouter");
+        }
+
+        return res;
+    }
 
     function _isVaultUpdater(address _caller, bool _raise) internal view returns (bool) {
         bool res = _caller == vaultUtils || _isPositionHandler(_caller, false);
@@ -743,7 +798,19 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         return tokenBalances[_token];
     }
 
-        /*
+    // function getBondOwner(bytes32 _key, uint256 _txType) external override view returns (address) {
+    //     return bonds[_key][_txType].owner;
+    // }
+
+    // function getBondToken(bytes32 _key, uint256 _txType) external override view returns (address) {
+    //     return bonds[_key][_txType].token;
+    // }
+
+    // function getBondAmount(bytes32 _key, uint256 _txType) external override view returns (uint256) {
+    //     return bonds[_key][_txType].amount;
+    // }
+
+    /*
     @dev: Let updater hotfix system amount
     */
     function updateSystemAmount(uint256 _type, uint256 _amount, address _token, bool _isPlus) external onlyOwner {
@@ -762,15 +829,42 @@ contract VaultV2 is IVaultV2, Constants, UUPSUpgradeable, OwnableUpgradeable, Re
         }
     }
 
-    // function getBondOwner(bytes32 _key, uint256 _txType) external override view returns (address) {
-    //     return bonds[_key][_txType].owner;
-    // }
+    function _applyDiscountFee(
+        uint256 _fee,
+        address _account,
+        bool _isApplyDiscountFee,
+        bool _isApplyRebate
+    ) internal returns (
+        uint256 discountSharePercentage,
+        uint256 rebatePercentage,
+        uint256 esRebatePercentage,
+        address referrer
+    ) {
+        {
+            (
+                discountSharePercentage,
+                rebatePercentage,
+                esRebatePercentage,
+                referrer
+            ) = referralSystem.applyDiscount(
+                _fee,
+                _account,
+                _isApplyDiscountFee,
+                _isApplyRebate
+            );
+        }
 
-    // function getBondToken(bytes32 _key, uint256 _txType) external override view returns (address) {
-    //     return bonds[_key][_txType].token;
-    // }
-
+<<<<<<< Updated upstream
     // function getBondAmount(bytes32 _key, uint256 _txType) external override view returns (uint256) {
     //     return bonds[_key][_txType].amount;
     // }
+=======
+        return (
+            discountSharePercentage,
+            rebatePercentage,
+            esRebatePercentage,
+            referrer
+        );
+    }
+>>>>>>> Stashed changes
 }
